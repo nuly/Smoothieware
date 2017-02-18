@@ -10,7 +10,6 @@
 
 #include "Network.h"
 #include "PublicDataRequest.h"
-#include "PlayerPublicAccess.h"
 #include "net_util.h"
 #include "uip_arp.h"
 #include "clock-arch.h"

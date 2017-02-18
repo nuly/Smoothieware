@@ -20,12 +20,7 @@
 #include "libs/PublicData.h"
 #include "modules/communication/SerialConsole.h"
 #include "modules/communication/GcodeDispatch.h"
-#include "modules/robot/Planner.h"
-#include "modules/robot/Robot.h"
-#include "modules/robot/Conveyor.h"
 #include "StepperMotor.h"
-#include "BaseSolution.h"
-#include "EndstopsPublicAccess.h"
 #include "Configurator.h"
 #include "SimpleShell.h"
 
@@ -150,12 +145,9 @@ Kernel::Kernel(){
     this->step_ticker->set_unstep_time( microseconds_per_step_pulse );
 
     // Core modules
-    this->add_module( this->conveyor       = new Conveyor()      );
     this->add_module( this->gcode_dispatch = new GcodeDispatch() );
-    this->add_module( this->robot          = new Robot()         );
     this->add_module( this->simpleshell    = new SimpleShell()   );
 
-    this->planner = new Planner();
     this->configurator = new Configurator();
 }
 
@@ -163,10 +155,7 @@ Kernel::Kernel(){
 std::string Kernel::get_query_string()
 {
     std::string str;
-    bool homing;
-    bool ok = PublicData::get_value(endstops_checksum, get_homing_status_checksum, 0, &homing);
-    if(!ok) homing= false;
-    bool running= false;
+    bool homing= false;
 
     str.append("<");
     if(halted) {
@@ -175,51 +164,10 @@ std::string Kernel::get_query_string()
         str.append("Home,");
     }else if(feed_hold) {
         str.append("Hold,");
-    }else if(this->conveyor->is_idle()) {
-        str.append("Idle,");
     }else{
-        running= true;
         str.append("Run,");
     }
 
-    if(running) {
-        // get real time current actuator position in mm
-        ActuatorCoordinates current_position{
-            robot->actuators[X_AXIS]->get_current_position(),
-            robot->actuators[Y_AXIS]->get_current_position(),
-            robot->actuators[Z_AXIS]->get_current_position()
-        };
-
-        // get machine position from the actuator position using FK
-        float mpos[3];
-        robot->arm_solution->actuator_to_cartesian(current_position, mpos);
-
-        char buf[128];
-        // machine position
-        size_t n= snprintf(buf, sizeof(buf), "%1.4f,%1.4f,%1.4f,", robot->from_millimeters(mpos[0]), robot->from_millimeters(mpos[1]), robot->from_millimeters(mpos[2]));
-        str.append("MPos:").append(buf, n);
-
-        // work space position
-        Robot::wcs_t pos= robot->mcs2wcs(mpos);
-        n= snprintf(buf, sizeof(buf), "%1.4f,%1.4f,%1.4f", robot->from_millimeters(std::get<X_AXIS>(pos)), robot->from_millimeters(std::get<Y_AXIS>(pos)), robot->from_millimeters(std::get<Z_AXIS>(pos)));
-        str.append("WPos:").append(buf, n);
-        str.append(">\r\n");
-
-    }else{
-        // return the last milestone if idle
-        char buf[128];
-        // machine position
-        Robot::wcs_t mpos= robot->get_axis_position();
-        size_t n= snprintf(buf, sizeof(buf), "%1.4f,%1.4f,%1.4f,", robot->from_millimeters(std::get<X_AXIS>(mpos)), robot->from_millimeters(std::get<Y_AXIS>(mpos)), robot->from_millimeters(std::get<Z_AXIS>(mpos)));
-        str.append("MPos:").append(buf, n);
-
-        // work space position
-        Robot::wcs_t pos= robot->mcs2wcs(mpos);
-        n= snprintf(buf, sizeof(buf), "%1.4f,%1.4f,%1.4f", robot->from_millimeters(std::get<X_AXIS>(pos)), robot->from_millimeters(std::get<Y_AXIS>(pos)), robot->from_millimeters(std::get<Z_AXIS>(pos)));
-        str.append("WPos:").append(buf, n);
-        str.append(">\r\n");
-
-    }
     return str;
 }
 
@@ -235,20 +183,13 @@ void Kernel::register_for_event(_EVENT_ENUM id_event, Module *mod){
 
 // Call a specific event with an argument
 void Kernel::call_event(_EVENT_ENUM id_event, void * argument){
-    bool was_idle= true;
     if(id_event == ON_HALT) {
         this->halted= (argument == nullptr);
-        was_idle= conveyor->is_idle(); // see if we were doing anything like printing
     }
 
     // send to all registered modules
     for (auto m : hooks[id_event]) {
         (m->*kernel_callback_functions[id_event])(argument);
-    }
-
-    if(id_event == ON_HALT && this->halted && !was_idle) {
-        // we need to try to correct current positions if we were running
-        this->robot->reset_position_from_current_actuator_position();
     }
 }
 

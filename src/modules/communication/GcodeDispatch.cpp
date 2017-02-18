@@ -8,10 +8,8 @@
 #include "GcodeDispatch.h"
 
 #include "libs/Kernel.h"
-#include "Robot.h"
 #include "utils/Gcode.h"
 #include "libs/nuts_bolts.h"
-#include "modules/robot/Conveyor.h"
 #include "libs/SerialMessage.h"
 #include "libs/StreamOutput.h"
 #include "libs/StreamOutputPool.h"
@@ -200,8 +198,6 @@ try_again:
                                 }
                             }
                             // makes it handle the parameters as a machine position
-                            THEROBOT->next_command_is_MCS= true;
-
                         }
 
                         // remember last modal group 1 code
@@ -287,7 +283,6 @@ try_again:
                             }
 
                             case 500: // M500 save volatile settings to config-override
-                                THEKERNEL->conveyor->wait_for_idle(); //just to be safe as it can take a while to run
                                 //remove(THEKERNEL->config_override_filename()); // seems to cause a hang every now and then
                                 __disable_irq();
                                 {

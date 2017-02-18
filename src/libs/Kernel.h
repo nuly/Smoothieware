@@ -9,8 +9,6 @@
 #define KERNEL_H
 
 #define THEKERNEL Kernel::instance
-#define THECONVEYOR THEKERNEL->conveyor
-#define THEROBOT THEKERNEL->robot
 
 #include "Module.h"
 #include <array>
@@ -20,13 +18,10 @@
 //Module manager
 class Config;
 class Module;
-class Conveyor;
 class SlowTicker;
 class SerialConsole;
 class StreamOutputPool;
 class GcodeDispatch;
-class Robot;
-class Planner;
 class StepTicker;
 class Adc;
 class PublicData;
@@ -60,10 +55,7 @@ class Kernel {
         SerialConsole*    serial;
         StreamOutputPool* streams;
         GcodeDispatch*    gcode_dispatch;
-        Robot*            robot;
-        Planner*          planner;
         Config*           config;
-        Conveyor*         conveyor;
         Configurator*     configurator;
         SimpleShell*      simpleshell;
 

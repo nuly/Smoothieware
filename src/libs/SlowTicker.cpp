@@ -13,7 +13,6 @@ using namespace std;
 #include "SlowTicker.h"
 #include "StepTicker.h"
 #include "libs/Hook.h"
-#include "modules/robot/Conveyor.h"
 #include "Gcode.h"
 
 #include <mri.h>
