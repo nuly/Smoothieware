@@ -12,6 +12,7 @@
 #include "modules/utils/currentcontrol/CurrentControl.h"
 #include "modules/utils/killbutton/KillButton.h"
 #include "libs/Network/uip/Network.h"
+#include "modules/pump/Pump.h"
 #include "Config.h"
 #include "checksumm.h"
 #include "ConfigValue.h"
@@ -83,12 +84,7 @@ void init() {
     kernel->streams->printf("Smoothie Running @%ldMHz\r\n", SystemCoreClock / 1000000);
     Version version;
     kernel->streams->printf("  Build version %s, Build date %s\r\n", version.get_build(), version.get_build_date());
-#ifdef CNC
-    kernel->streams->printf("  CNC Build\r\n");
-#endif
-#ifdef DISABLEMSD
-    kernel->streams->printf("  NOMSD Build\r\n");
-#endif
+    kernel->streams->printf("  Nuli Pump Build\r\n");
 
     bool sdok= (sd.disk_initialize() == 0);
     if(!sdok) kernel->streams->printf("SDCard failed to initialize\r\n");
@@ -114,6 +110,7 @@ void init() {
     // Create and add main modules
     kernel->add_module( new(AHB0) CurrentControl() );
     kernel->add_module( new(AHB0) KillButton() );
+    kernel->add_module( new(AHB0) Pump() );
 
     // these modules can be completely disabled in the Makefile by adding to EXCLUDE_MODULES
     #ifndef NONETWORK

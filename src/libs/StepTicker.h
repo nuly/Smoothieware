@@ -24,7 +24,7 @@ class StepperMotor;
 #define STEPTICKER_TOFP(x) ((int32_t)roundf((float)(x)*STEPTICKER_FPSCALE))
 #define STEPTICKER_FROMFP(x) ((float)(x)/STEPTICKER_FPSCALE)
 
-#define k_max_actuators 5
+#define k_max_actuators 6
 
 class StepTicker{
     public:
