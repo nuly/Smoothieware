@@ -60,6 +60,10 @@ private:
     static void remount_command( string parameters, StreamOutput *stream);
 
     static void test_command( string parameters, StreamOutput *stream);
+    static void step_command( string parameters, StreamOutput *stream);
+    static void speed_command( string parameters, StreamOutput *stream);
+    static void info_command( string parameters, StreamOutput *stream);
+    static void stop_command( string parameters, StreamOutput *stream);
 
     typedef void (*PFUNC)(string parameters, StreamOutput *stream);
     typedef struct {

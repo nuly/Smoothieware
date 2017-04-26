@@ -24,14 +24,18 @@ class StepperMotor  : public Module {
         inline void unstep() { step_pin.set(0); }
         // called from step ticker ISR
         inline void set_direction(bool f) { dir_pin.set(f); direction= f; }
+        bool get_direction() const { return direction; }
 
         void enable(bool state) { en_pin.set(!state); };
         bool is_enabled() const { return !en_pin.get(); };
         bool is_moving() const { return moving; };
-        void start_moving() { moving= true; }
-        void stop_moving() { moving= false; }
+        void start_moving() { moving= true; };
+        void stop_moving() { moving= false; };
 
         void manual_step(bool dir);
+        void set_speed(int speed);
+        int get_speed() const { return target_delta * (target_dir ? 1 : -1); };
+        int get_actual_speed() const { return tick_delta * (direction ? 1 : -1); };
 
         bool which_direction() const { return direction; }
 
@@ -47,13 +51,18 @@ class StepperMotor  : public Module {
         uint32_t get_current_step(void) const { return current_position_steps; }
         float get_max_rate(void) const { return max_rate; }
         void set_max_rate(float mr) { max_rate= mr; }
-        void set_acceleration(float a) { acceleration= a; }
-        float get_acceleration() const { return acceleration; }
         bool is_selected() const { return selected; }
         void set_selected(bool b) { selected= b; }
 
         int32_t steps_to_target(float);
 
+        unsigned int tick_delta = 100000;
+        unsigned int target_delta = 100000;
+        unsigned int last_tick = 0;
+        bool target_dir = 1;
+        float now_speed = 0;
+
+        void set_targets(uint32_t target_position, uint32_t target_speed);
 
     private:
         void on_halt(void *argument);
@@ -66,7 +75,7 @@ class StepperMotor  : public Module {
         float steps_per_second;
         float steps_per_mm;
         float max_rate; // this is not really rate it is in mm/sec, misnamed used in Robot and Extruder
-        float acceleration;
+        float current_speed;
 
         volatile int32_t current_position_steps;
         int32_t last_milestone_steps;
@@ -77,6 +86,8 @@ class StepperMotor  : public Module {
             volatile bool direction:1;
             volatile bool moving:1;
             bool selected:1;
+            uint32_t target_position_steps:32;
+            uint32_t target_tick_delta:32;
         };
 };
 

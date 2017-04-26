@@ -138,13 +138,79 @@ void StepTicker::step_tick (void)
         return;
     }
 
-    bool still_moving= false;
+    if (pumping) {
+        float current_speed = get_pump_speed();
+        uint8_t rm; bool reverse = false;
+        uint8_t fb;
+        for (uint8_t m = 0; m < num_motors; m++) {
+            if (motor[m]->get_direction() && motor[m]->current_position > 15900) {
+                reverse = true;
+                rm = m;
+            }
+        }
+        if (reverse) {
+            for (uint8_t m = 0; m < num_motors; m++) {
+                if (!motor[m]->get_direction()) {
+                    fb = m;
+                }
+            }
+            for (uint8_t m = 0; m < num_motors; m++) {
+                if (!motor[m]->get_direction() && motor[m]->get_current_step() > motor[fb]->get_current_step()) {
+                    fb = m;
+                }
+            }
+
+            motor[fb]->set_targets();
+            for (uint8_t m = 0; m < num_motors; m++) {
+            }
+        }
+    }
+
     // foreach motor, if it is active see if time to issue a step to that motor
     for (uint8_t m = 0; m < num_motors; m++) {
-        // need to redo this
+        if (!motor[m]->is_moving()) {
+            continue;
+        }
 
-        // see if any motors are still moving after this tick
-        if(motor[m]->is_moving()) still_moving= true;
+        // get direction set up
+        if (current_tick >= motor[m]->tick_delta + motor[m]->last_tick) {
+            // time to tick!
+            int itsbeen = current_tick - motor[m]->last_tick;
+            motor[m]->last_tick = current_tick;
+            motor[m]->step();
+
+            float fast = 100000;
+            float slow = 100000;
+
+            fast = motor[m]->tick_delta / (1. + 0.1 * itsbeen * motor[m]->tick_delta);
+            if (0.1 * itsbeen * motor[m]->tick_delta < 1) {
+                slow = motor[m]->tick_delta / (1. - 0.1 * itsbeen * motor[m]->tick_delta);
+            }
+
+            if (fast < 10  ) { fast = 10; }
+
+            if (motor[m]->which_direction() ^ motor[m]->target_dir) {
+               if (slow > 10000 || slow < 0) {
+                   motor[m]->tick_delta = 5000;
+                   motor[m]->set_direction(motor[m]->target_dir);
+               } else {
+                   motor[m]->tick_delta = slow;
+               }
+            } else if (motor[m]->target_delta < motor[m]->tick_delta) {
+               if (fast < motor[m]->target_delta) {
+                motor[m]->tick_delta = motor[m]->target_delta;
+               } else {
+                   motor[m]->tick_delta = fast;
+               }
+            } else {
+               if (motor[m]->target_delta < slow) {
+                motor[m]->tick_delta = motor[m]->target_delta;
+               } else {
+                   motor[m]->tick_delta = slow;
+               }
+            }
+            unstep.set(m);
+        }
     }
 
     // do this after so we start at tick 0
@@ -158,13 +224,6 @@ void StepTicker::step_tick (void)
         LPC_TIM1->TCR = 3;
         LPC_TIM1->TCR = 1;
     }
-
-
-    // see if any motors are still moving
-    if(!still_moving) {
-        // all moves finished
-        current_tick = 0;
-    }
 }
 
 // returns index of the stepper motor in the array and bitset
@@ -172,4 +231,55 @@ int StepTicker::register_motor(StepperMotor* m)
 {
     motor[num_motors++] = m;
     return num_motors - 1;
+}
+
+void StepTicker::manual_step(int i, bool dir) {
+    if (i >= 0 && i < num_motors) {
+        motor[i]->manual_step(dir);
+    }
+}
+
+void StepTicker::set_speed(int i, int speed) {
+    if (i >= 0 && i < num_motors) {
+        motor[i]->set_speed(speed);
+        if (motor[i]->tick_delta > 1000) {
+            motor[i]->last_tick = current_tick;
+        }
+    }
+}
+
+int StepTicker::get_speed(int i) const { return motor[i]->get_speed(); }
+int StepTicker::get_actual_speed(int i) const { return motor[i]->get_actual_speed(); }
+int StepTicker::get_current_step(int i) const { return motor[i]->get_current_step(); }
+
+void StepTicker::stop() {
+    pumping = false;
+    for (uint8_t m = 0; m < num_motors; m++) {
+        motor[m]->stop_moving();
+    }
+}
+
+void StepTicker::pump_speed(float speed) {
+    total_speed = floorf(frequency/speed);
+
+    if (!pumping) {
+        pumping = true;
+        // TODO think about this
+        for (uint8_t m=0; m<num_motors; m++) {
+            motor[m]->set_direction(m<num_motors-1);
+            if (m < num_motors-1) {
+                motor[m]->set_targets(16000*m/(num_motors-1), total_speed / (num_motors-1));
+            }
+        }
+    }
+}
+
+float StepTicker::get_pump_speed() {
+    float rval = 0;
+    for (uint8_t m = 0; m < num_motors; m++) {
+        if (motor[m]->get_direction()) {
+            rval += frequency/motor[m]->tick_delta;
+        }
+    }
+    return rval;
 }

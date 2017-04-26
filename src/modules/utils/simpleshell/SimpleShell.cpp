@@ -23,6 +23,7 @@
 #include "Gcode.h"
 #include "GcodeDispatch.h"
 #include "StepperMotor.h"
+#include "StepTicker.h"
 #include "Configurator.h"
 
 #include "NetworkPublicAccess.h"
@@ -77,6 +78,10 @@ const SimpleShell::ptentry_t SimpleShell::commands_table[] = {
     {"thermistors", SimpleShell::print_thermistors_command},
     {"md5sum",   SimpleShell::md5sum_command},
     {"test",     SimpleShell::test_command},
+    {"step",     SimpleShell::step_command},
+    {"speed",     SimpleShell::speed_command},
+    {"info",     SimpleShell::info_command},
+    {"stop",     SimpleShell::stop_command},
 
     // unknown command
     {NULL, NULL}
@@ -703,6 +708,45 @@ void SimpleShell::md5sum_command( string parameters, StreamOutput *stream )
 
     stream->printf("%s %s\n", md5.finalize().hexdigest().c_str(), filename.c_str());
     fclose(lp);
+}
+
+// runs several types of test on the mechanisms
+void SimpleShell::step_command( string parameters, StreamOutput *stream)
+{
+    string motor_idx_str = shift_parameter( parameters );
+    string direction = shift_parameter( parameters );
+    int mi = motor_idx_str.empty() ? 0 : atoi(motor_idx_str.c_str());
+    bool dir = direction.empty() ? false : atoi(direction.c_str());
+    stream->printf("send tick to motor %d in direction %d\n", mi, dir);
+    THEKERNEL->step_ticker->manual_step(mi, dir);
+}
+
+// runs several types of test on the mechanisms
+void SimpleShell::speed_command( string parameters, StreamOutput *stream)
+{
+    string motor_idx_str = shift_parameter( parameters );
+    string speed_str = shift_parameter( parameters );
+    int mi = motor_idx_str.empty() ? 0 : atoi(motor_idx_str.c_str());
+//    float speed = speed_str.empty() ? 0. : strtof(speed_str.c_str(), NULL);
+    int speedi = speed_str.empty() ? 0. : atoi(speed_str.c_str());
+    stream->printf("set speed of motor %d to %d\n", mi, speedi);
+    THEKERNEL->step_ticker->set_speed(mi, speedi);
+}
+
+void SimpleShell::info_command( string parameters, StreamOutput *stream)
+{
+    for (int mi=0; mi<THEKERNEL->step_ticker->get_num_motors(); mi++) {
+        stream->printf("motor.%d: %10d %10d %15d\n", mi,
+                THEKERNEL->step_ticker->get_speed(mi),
+                THEKERNEL->step_ticker->get_actual_speed(mi),
+                THEKERNEL->step_ticker->get_current_step(mi)
+                );
+    }
+}
+
+void SimpleShell::stop_command( string parameters, StreamOutput *stream)
+{
+    THEKERNEL->step_ticker->stop();
 }
 
 // runs several types of test on the mechanisms
