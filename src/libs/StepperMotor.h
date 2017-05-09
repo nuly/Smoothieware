@@ -28,41 +28,45 @@ class StepperMotor  : public Module {
 
         void enable(bool state) { en_pin.set(!state); };
         bool is_enabled() const { return !en_pin.get(); };
-        bool is_moving() const { return moving; };
+        inline bool is_moving() const { return moving; };
         void start_moving() { moving= true; };
         void stop_moving() { moving= false; };
 
         void manual_step(bool dir);
-        void set_speed(int speed);
+        void set_speed(float speed);
         int get_speed() const { return target_delta * (target_dir ? 1 : -1); };
         int get_actual_speed() const { return tick_delta * (direction ? 1 : -1); };
 
-        bool which_direction() const { return direction; }
+        inline bool which_direction() const { return direction; }
 
         float get_steps_per_second()  const { return steps_per_second; }
         float get_steps_per_mm()  const { return steps_per_mm; }
         void change_steps_per_mm(float);
-        void change_last_milestone(float);
-        void set_last_milestones(float, int32_t);
-        void update_last_milestones(float mm, int32_t steps);
-        float get_last_milestone(void) const { return last_milestone_mm; }
-        int32_t get_last_milestone_steps(void) const { return last_milestone_steps; }
         float get_current_position(void) const { return (float)current_position_steps/steps_per_mm; }
         uint32_t get_current_step(void) const { return current_position_steps; }
+
+        inline float get_current_speed(void) const { return current_speed; }
+        inline void set_current_speed(float cs) { current_speed = cs; }
+
         float get_max_rate(void) const { return max_rate; }
         void set_max_rate(float mr) { max_rate= mr; }
         bool is_selected() const { return selected; }
         void set_selected(bool b) { selected= b; }
 
-        int32_t steps_to_target(float);
-
         unsigned int tick_delta = 100000;
         unsigned int target_delta = 100000;
-        unsigned int last_tick = 0;
+        volatile unsigned int last_tick = 0;
         bool target_dir = 1;
+        volatile float target_speed = 0;
         float now_speed = 0;
 
-        void set_targets(uint32_t target_position, uint32_t target_speed);
+        void zero_position();
+        float stop_dist();
+        bool will_crash();
+        float time_to_fill();
+        float time_to_empty();
+
+        volatile float current_speed;
 
     private:
         void on_halt(void *argument);
@@ -75,19 +79,14 @@ class StepperMotor  : public Module {
         float steps_per_second;
         float steps_per_mm;
         float max_rate; // this is not really rate it is in mm/sec, misnamed used in Robot and Extruder
-        float current_speed;
 
         volatile int32_t current_position_steps;
-        int32_t last_milestone_steps;
-        float   last_milestone_mm;
 
         volatile struct {
             uint8_t motor_id:8;
             volatile bool direction:1;
             volatile bool moving:1;
             bool selected:1;
-            uint32_t target_position_steps:32;
-            uint32_t target_tick_delta:32;
         };
 };
 

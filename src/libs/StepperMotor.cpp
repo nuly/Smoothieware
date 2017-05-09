@@ -13,6 +13,10 @@
 #include <math.h>
 #include "mbed.h"
 
+#define a_max (10.)
+#define v_max (20000.)
+#define l_steps (25000.)
+
 StepperMotor::StepperMotor(Pin &step, Pin &dir, Pin &en) : step_pin(step), dir_pin(dir), en_pin(en)
 {
     set_high_on_debug(en.port_number, en.pin);
@@ -20,9 +24,10 @@ StepperMotor::StepperMotor(Pin &step, Pin &dir, Pin &en) : step_pin(step), dir_p
     steps_per_mm         = 1.0F;
     max_rate             = 50.0F;
 
-    last_milestone_steps = 0;
-    last_milestone_mm    = 0.0F;
     current_position_steps= 0;
+    current_speed = 0.0F;
+    target_speed = 0.0F;
+
     moving= false;
     selected= true;
 
@@ -64,34 +69,6 @@ void StepperMotor::on_enable(void *argument)
 void StepperMotor::change_steps_per_mm(float new_steps)
 {
     steps_per_mm = new_steps;
-    last_milestone_steps = lroundf(last_milestone_mm * steps_per_mm);
-    current_position_steps = last_milestone_steps;
-}
-
-void StepperMotor::change_last_milestone(float new_milestone)
-{
-    last_milestone_mm = new_milestone;
-    last_milestone_steps = lroundf(last_milestone_mm * steps_per_mm);
-    current_position_steps = last_milestone_steps;
-}
-
-void StepperMotor::set_last_milestones(float mm, int32_t steps)
-{
-    last_milestone_mm= mm;
-    last_milestone_steps= steps;
-    current_position_steps= last_milestone_steps;
-}
-
-void StepperMotor::update_last_milestones(float mm, int32_t steps)
-{
-    last_milestone_steps += steps;
-    last_milestone_mm = mm;
-}
-
-int32_t StepperMotor::steps_to_target(float target)
-{
-    int32_t target_steps = lroundf(target * steps_per_mm);
-    return target_steps - last_milestone_steps;
 }
 
 // Does a manual step pulse, used for direct encoder control of a stepper
@@ -117,20 +94,76 @@ void StepperMotor::manual_step(bool dir) {
     this->current_position_steps += (dir ? -1 : 1);
 }
 
-void StepperMotor::set_speed(int speed) {
+void StepperMotor::set_speed(float speed) {
     if (!is_enabled()) enable(true);
     moving = true;
 
-    if (speed > 0) {
-        target_delta = speed;
-        target_dir = 1;
+    target_speed = speed;
+}
+
+void StepperMotor::zero_position() {
+    current_position_steps = 0;
+}
+
+float stop_dist_raw(float v) {
+    return 1.;
+    return 0.5 * v * v / a_max;
+}
+
+float StepperMotor::stop_dist() {
+    return stop_dist_raw(current_speed);
+}
+
+bool StepperMotor::will_crash() {
+    if (direction) {
+        if (current_position_steps <= -l_steps) {
+            return true;
+        }
+        return current_speed > 0 && stop_dist() - current_position_steps >= l_steps;
     } else {
-        target_delta = -speed;
-        target_dir = 0;
+        if (current_position_steps >= 0) {
+            return true;
+        }
+        return current_speed < 0 && stop_dist() >= -current_position_steps;
     }
 }
 
-void StepperMotor::set_targets(uint32_t target_position, uint32_t target_speed) {
-    target_position_steps = target_position;
-    target_tick_delta = target_speed;
+float time_to_fill_raw(float x, float v) {
+    return x / v_max;
+
+    float rval = 0;
+    float half_time = 0;
+    float v2;
+
+    if (v > 0) {
+        rval += v / a_max;
+        x += stop_dist_raw(v);
+        v = 0;
+    }
+
+    rval += v / a_max;
+    x += 0.5 * v * v / a_max;
+    v = 0;
+
+    half_time = sqrt(x / a_max);
+    v2 = half_time * a_max;
+
+    if (v2 < v_max) {
+        rval += 2 * half_time;
+    } else {
+        rval += (x - 2 * v_max * v_max / a_max) / v_max + 2 * (v_max / a_max);
+    }
+
+    v2 = v_max;
+    rval += x / v_max;
+
+    return rval;
+}
+
+float StepperMotor::time_to_fill() {
+    return time_to_fill_raw(-current_position_steps, current_speed);
+}
+
+float StepperMotor::time_to_empty() {
+    return time_to_fill_raw(l_steps + current_position_steps, -current_speed);
 }

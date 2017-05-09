@@ -64,6 +64,8 @@ private:
     static void speed_command( string parameters, StreamOutput *stream);
     static void info_command( string parameters, StreamOutput *stream);
     static void stop_command( string parameters, StreamOutput *stream);
+    static void pump_command( string parameters, StreamOutput *stream);
+    static void zero_command( string parameters, StreamOutput *stream);
 
     typedef void (*PFUNC)(string parameters, StreamOutput *stream);
     typedef struct {

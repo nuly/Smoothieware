@@ -82,6 +82,8 @@ const SimpleShell::ptentry_t SimpleShell::commands_table[] = {
     {"speed",     SimpleShell::speed_command},
     {"info",     SimpleShell::info_command},
     {"stop",     SimpleShell::stop_command},
+    {"pump",     SimpleShell::pump_command},
+    {"zero",     SimpleShell::zero_command},
 
     // unknown command
     {NULL, NULL}
@@ -721,25 +723,44 @@ void SimpleShell::step_command( string parameters, StreamOutput *stream)
     THEKERNEL->step_ticker->manual_step(mi, dir);
 }
 
-// runs several types of test on the mechanisms
 void SimpleShell::speed_command( string parameters, StreamOutput *stream)
 {
     string motor_idx_str = shift_parameter( parameters );
     string speed_str = shift_parameter( parameters );
     int mi = motor_idx_str.empty() ? 0 : atoi(motor_idx_str.c_str());
-//    float speed = speed_str.empty() ? 0. : strtof(speed_str.c_str(), NULL);
-    int speedi = speed_str.empty() ? 0. : atoi(speed_str.c_str());
-    stream->printf("set speed of motor %d to %d\n", mi, speedi);
-    THEKERNEL->step_ticker->set_speed(mi, speedi);
+    float speed = speed_str.empty() ? 0. : strtof(speed_str.c_str(), NULL);
+    stream->printf("set speed of motor %d to %f\n", mi, speed);
+    THEKERNEL->step_ticker->set_speed(mi, speed);
+}
+
+void SimpleShell::pump_command( string parameters, StreamOutput *stream)
+{
+    string speed_str = shift_parameter( parameters );
+    float speed = speed_str.empty() ? 0. : strtof(speed_str.c_str(), NULL);
+    stream->printf("pumping at speed %f\n", speed);
+    THEKERNEL->step_ticker->pump_speed(speed);
+}
+
+void SimpleShell::zero_command( string parameters, StreamOutput *stream)
+{
+    stream->printf("setting positions to zero\n");
+    THEKERNEL->step_ticker->zero_motors();
 }
 
 void SimpleShell::info_command( string parameters, StreamOutput *stream)
 {
+    stream->printf("pump: %10.4f\n", 
+            THEKERNEL->step_ticker->get_pump_speed()
+            );
+
     for (int mi=0; mi<THEKERNEL->step_ticker->get_num_motors(); mi++) {
-        stream->printf("motor.%d: %10d %10d %15d\n", mi,
-                THEKERNEL->step_ticker->get_speed(mi),
-                THEKERNEL->step_ticker->get_actual_speed(mi),
-                THEKERNEL->step_ticker->get_current_step(mi)
+        stream->printf("motor.%d: %d %d %10d %15d %10.4f %10.4f\n", mi,
+                THEKERNEL->step_ticker->get_motor(mi)->get_direction(),
+                THEKERNEL->step_ticker->get_motor(mi)->will_crash(),
+                THEKERNEL->step_ticker->get_current_speed(mi),
+                THEKERNEL->step_ticker->get_current_step(mi),
+                THEKERNEL->step_ticker->get_motor(mi)->time_to_fill(),
+                THEKERNEL->step_ticker->get_motor(mi)->time_to_empty()
                 );
     }
 }

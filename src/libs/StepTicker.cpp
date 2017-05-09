@@ -27,6 +27,13 @@ GPIO stepticker_debug_pin(STEPTICKER_DEBUG_PIN);
 #define SET_STEPTICKER_DEBUG_PIN(n)
 #endif
 
+#define NUM_FORWARD (2)
+
+#define a_max (10.)
+#define v_max (20000.)
+#define l_steps (25000.)
+#define INF (v_max+1)
+
 StepTicker *StepTicker::instance;
 
 StepTicker::StepTicker()
@@ -44,13 +51,15 @@ StepTicker::StepTicker()
     LPC_TIM1->TCR = 0;              // Disable interrupt
 
     // Default start values
-    this->set_frequency(100000);
+    this->set_frequency(1000);
     this->set_unstep_time(100);
 
+    this->reverse.reset();
     this->unstep.reset();
     this->num_motors = 0;
 
     this->running = false;
+    this->pumping = false;
 
     #ifdef STEPTICKER_DEBUG_PIN
     // setup debug pin if defined
@@ -139,76 +148,109 @@ void StepTicker::step_tick (void)
     }
 
     if (pumping) {
-        float current_speed = get_pump_speed();
-        uint8_t rm; bool reverse = false;
-        uint8_t fb;
+        reverse.reset();
         for (uint8_t m = 0; m < num_motors; m++) {
-            if (motor[m]->get_direction() && motor[m]->current_position > 15900) {
-                reverse = true;
-                rm = m;
+            if (motor[m]->get_direction() && motor[m]->will_crash()) {
+                reverse.set(m);
+            }
+
+            uint8_t mnext = (m+1) % num_motors;
+
+            if (motor[m]->get_direction() && 
+                motor[mnext]->get_direction() &&
+                motor[mnext]->time_to_empty() <= motor[m]->time_to_fill()) {
+                reverse.set(m);
             }
         }
-        if (reverse) {
-            for (uint8_t m = 0; m < num_motors; m++) {
-                if (!motor[m]->get_direction()) {
-                    fb = m;
-                }
+
+        for (uint8_t m = 0; m < num_motors; m++) {
+            if (reverse[m]) {
+                uint8_t mprev = (m+num_motors-1)%num_motors;
+                motor[m]->set_direction(false);
+                motor[mprev]->set_direction(true);
             }
+        }
+
+        float flux_err = 0, vn;
+        float rflux;
+        for (int ig = 0; ig < 2; ig++) {
+            rflux = 0;
             for (uint8_t m = 0; m < num_motors; m++) {
-                if (!motor[m]->get_direction() && motor[m]->get_current_step() > motor[fb]->get_current_step()) {
-                    fb = m;
+                if (motor[m]->get_direction()) {
+                    vn = (flux_hat + flux_err) / ((float)NUM_FORWARD);
+                } else if (motor[m]->will_crash()) {
+                    vn = 0;
+                } else {
+                    vn = -INF;
+                }
+
+                /*
+                if (vn - motor[m]->get_current_speed() > a_max) {
+                    vn = motor[m]->get_current_speed() + a_max;
+                } else if (vn - motor[m]->get_current_speed() < -a_max) {
+                    vn = motor[m]->get_current_speed() - a_max;
+                }
+                */
+
+                if (vn > v_max) {
+                    vn = v_max;
+                } else if (vn < -v_max) {
+                    vn = -v_max;
+                }
+
+                if (ig == 1) {
+                    motor[m]->set_current_speed(vn);
+                }
+
+                if (vn > 0) {
+                    rflux += vn;
                 }
             }
 
-            motor[fb]->set_targets();
-            for (uint8_t m = 0; m < num_motors; m++) {
+            flux_err = flux_hat - rflux;
+        }
+    } else {
+        float vn, cs;
+        for (uint8_t m = 0; m < num_motors; m++) {
+            if (!motor[m]->is_moving()) continue;
+
+            vn = motor[m]->target_speed;
+            cs = motor[m]->current_speed;
+            /*
+            if (vn - cs > a_max) {
+                vn = cs + a_max;
+            } else if (vn - cs < -a_max) {
+                vn = cs - a_max;
             }
+            */
+            if (vn > v_max) {
+                vn = v_max;
+            } else if (vn < -v_max) {
+                vn = -v_max;
+            }
+            motor[m]->set_current_speed(vn);
         }
     }
 
-    // foreach motor, if it is active see if time to issue a step to that motor
+    // for each motor
     for (uint8_t m = 0; m < num_motors; m++) {
         if (!motor[m]->is_moving()) {
             continue;
         }
 
         // get direction set up
-        if (current_tick >= motor[m]->tick_delta + motor[m]->last_tick) {
+        int td = current_tick - motor[m]->last_tick;
+        if (td * abs(motor[m]->get_current_speed()) > frequency) {
             // time to tick!
-            int itsbeen = current_tick - motor[m]->last_tick;
             motor[m]->last_tick = current_tick;
+
+            bool cdirection = motor[m]->get_current_speed() > 0;
+
+            if (motor[m]->which_direction() ^ cdirection) {
+                motor[m]->set_direction(cdirection);
+            }
+
             motor[m]->step();
-
-            float fast = 100000;
-            float slow = 100000;
-
-            fast = motor[m]->tick_delta / (1. + 0.1 * itsbeen * motor[m]->tick_delta);
-            if (0.1 * itsbeen * motor[m]->tick_delta < 1) {
-                slow = motor[m]->tick_delta / (1. - 0.1 * itsbeen * motor[m]->tick_delta);
-            }
-
-            if (fast < 10  ) { fast = 10; }
-
-            if (motor[m]->which_direction() ^ motor[m]->target_dir) {
-               if (slow > 10000 || slow < 0) {
-                   motor[m]->tick_delta = 5000;
-                   motor[m]->set_direction(motor[m]->target_dir);
-               } else {
-                   motor[m]->tick_delta = slow;
-               }
-            } else if (motor[m]->target_delta < motor[m]->tick_delta) {
-               if (fast < motor[m]->target_delta) {
-                motor[m]->tick_delta = motor[m]->target_delta;
-               } else {
-                   motor[m]->tick_delta = fast;
-               }
-            } else {
-               if (motor[m]->target_delta < slow) {
-                motor[m]->tick_delta = motor[m]->target_delta;
-               } else {
-                   motor[m]->tick_delta = slow;
-               }
-            }
             unstep.set(m);
         }
     }
@@ -239,18 +281,17 @@ void StepTicker::manual_step(int i, bool dir) {
     }
 }
 
-void StepTicker::set_speed(int i, int speed) {
+void StepTicker::set_speed(int i, float speed) {
     if (i >= 0 && i < num_motors) {
         motor[i]->set_speed(speed);
-        if (motor[i]->tick_delta > 1000) {
-            motor[i]->last_tick = current_tick;
-        }
+        motor[i]->last_tick = current_tick;
     }
 }
 
 int StepTicker::get_speed(int i) const { return motor[i]->get_speed(); }
 int StepTicker::get_actual_speed(int i) const { return motor[i]->get_actual_speed(); }
 int StepTicker::get_current_step(int i) const { return motor[i]->get_current_step(); }
+int StepTicker::get_current_speed(int i) const { return motor[i]->get_current_speed(); }
 
 void StepTicker::stop() {
     pumping = false;
@@ -260,16 +301,12 @@ void StepTicker::stop() {
 }
 
 void StepTicker::pump_speed(float speed) {
-    total_speed = floorf(frequency/speed);
+    flux_hat = speed;
 
     if (!pumping) {
         pumping = true;
-        // TODO think about this
         for (uint8_t m=0; m<num_motors; m++) {
-            motor[m]->set_direction(m<num_motors-1);
-            if (m < num_motors-1) {
-                motor[m]->set_targets(16000*m/(num_motors-1), total_speed / (num_motors-1));
-            }
+            motor[m]->set_direction(m>=num_motors-NUM_FORWARD);
         }
     }
 }
@@ -277,9 +314,16 @@ void StepTicker::pump_speed(float speed) {
 float StepTicker::get_pump_speed() {
     float rval = 0;
     for (uint8_t m = 0; m < num_motors; m++) {
-        if (motor[m]->get_direction()) {
-            rval += frequency/motor[m]->tick_delta;
+        if (motor[m]->is_moving() && motor[m]->get_direction()) {
+            rval += motor[m]->get_current_speed();
         }
     }
     return rval;
+}
+
+
+void StepTicker::zero_motors() {
+    for (uint8_t m=0; m<num_motors; m++) {
+        motor[m]->zero_position();
+    }
 }
