@@ -13,8 +13,9 @@
 #include <math.h>
 #include "mbed.h"
 
-#define a_max (10.)
-#define v_max (20000.)
+#define a_max (5.)
+#define v_max (10000.)
+#define nv_max (-10000.)
 #define l_steps (25000.)
 
 StepperMotor::StepperMotor(Pin &step, Pin &dir, Pin &en) : step_pin(step), dir_pin(dir), en_pin(en)
@@ -107,7 +108,7 @@ void StepperMotor::zero_position() {
 
 float stop_dist_raw(float v) {
     return 1.;
-    return 0.5 * v * v / a_max;
+//    return 0.5 * v * v / a_max;
 }
 
 float StepperMotor::stop_dist() {
@@ -128,8 +129,8 @@ bool StepperMotor::will_crash() {
     }
 }
 
-float time_to_fill_raw(float x, float v) {
-    return x / v_max;
+float time_to_fill_raw(float x, float v, float vm) {
+    return x / vm;
 
     float rval = 0;
     float half_time = 0;
@@ -148,22 +149,22 @@ float time_to_fill_raw(float x, float v) {
     half_time = sqrt(x / a_max);
     v2 = half_time * a_max;
 
-    if (v2 < v_max) {
+    if (v2 < vm) {
         rval += 2 * half_time;
     } else {
-        rval += (x - 2 * v_max * v_max / a_max) / v_max + 2 * (v_max / a_max);
+        rval += (x - 2 * vm * vm / a_max) / vm + 2 * (vm / a_max);
     }
 
-    v2 = v_max;
-    rval += x / v_max;
+    v2 = vm;
+    rval += x / vm;
 
     return rval;
 }
 
 float StepperMotor::time_to_fill() {
-    return time_to_fill_raw(-current_position_steps, current_speed);
+    return time_to_fill_raw(-current_position_steps, current_speed, -nv_max);
 }
 
 float StepperMotor::time_to_empty() {
-    return time_to_fill_raw(l_steps + current_position_steps, -current_speed);
+    return time_to_fill_raw(l_steps + current_position_steps, -current_speed, v_max);
 }

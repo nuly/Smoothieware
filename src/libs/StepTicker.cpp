@@ -29,8 +29,9 @@ GPIO stepticker_debug_pin(STEPTICKER_DEBUG_PIN);
 
 #define NUM_FORWARD (2)
 
-#define a_max (10.)
-#define v_max (20000.)
+#define a_max (5.)
+#define v_max (10000.)
+#define nv_max (-10000.)
 #define l_steps (25000.)
 #define INF (v_max+1)
 
@@ -181,21 +182,19 @@ void StepTicker::step_tick (void)
                 } else if (motor[m]->will_crash()) {
                     vn = 0;
                 } else {
-                    vn = -INF;
+                    vn = nv_max;
                 }
 
-                /*
                 if (vn - motor[m]->get_current_speed() > a_max) {
                     vn = motor[m]->get_current_speed() + a_max;
                 } else if (vn - motor[m]->get_current_speed() < -a_max) {
                     vn = motor[m]->get_current_speed() - a_max;
                 }
-                */
 
                 if (vn > v_max) {
                     vn = v_max;
-                } else if (vn < -v_max) {
-                    vn = -v_max;
+                } else if (vn < nv_max) {
+                    vn = nv_max;
                 }
 
                 if (ig == 1) {
@@ -216,17 +215,15 @@ void StepTicker::step_tick (void)
 
             vn = motor[m]->target_speed;
             cs = motor[m]->current_speed;
-            /*
             if (vn - cs > a_max) {
                 vn = cs + a_max;
             } else if (vn - cs < -a_max) {
                 vn = cs - a_max;
             }
-            */
             if (vn > v_max) {
                 vn = v_max;
-            } else if (vn < -v_max) {
-                vn = -v_max;
+            } else if (vn < nv_max) {
+                vn = nv_max;
             }
             motor[m]->set_current_speed(vn);
         }
@@ -239,10 +236,10 @@ void StepTicker::step_tick (void)
         }
 
         // get direction set up
-        int td = current_tick - motor[m]->last_tick;
-        if (td * abs(motor[m]->get_current_speed()) > frequency) {
+        motor[m]->last_tick += period;
+        if (motor[m]->last_tick >= frequency) {
             // time to tick!
-            motor[m]->last_tick = current_tick;
+            motor[m]->last_tick %= int(frequency);
 
             bool cdirection = motor[m]->get_current_speed() > 0;
 
