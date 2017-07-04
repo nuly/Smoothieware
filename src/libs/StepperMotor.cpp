@@ -1,8 +1,15 @@
 /*
-      This file is part of Smoothie (http://smoothieware.org/). The motion control part is heavily based on Grbl (https://github.com/simen/grbl).
-      Smoothie is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
-      Smoothie is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
-      You should have received a copy of the GNU General Public License along with Smoothie. If not, see <http://www.gnu.org/licenses/>.
+      This file is part of Smoothie (http://smoothieware.org/). The motion
+      control part is heavily based on Grbl (https://github.com/simen/grbl).
+      Smoothie is free software: you can redistribute it and/or modify it under
+      the terms of the GNU General Public License as published by the Free
+      Software Foundation, either version 3 of the License, or (at your option)
+      any later version.  Smoothie is distributed in the hope that it will be
+      useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+      Public License for more details.  You should have received a copy of the
+      GNU General Public License along with Smoothie. If not, see
+      <http://www.gnu.org/licenses/>.
 */
 #include "StepperMotor.h"
 
@@ -13,24 +20,16 @@
 #include <math.h>
 #include "mbed.h"
 
-#define a_max (5.)
-#define v_max (10000.)
-#define nv_max (-10000.)
-#define l_steps (25000.)
+#include "constants.h"
 
 StepperMotor::StepperMotor(Pin &step, Pin &dir, Pin &en) : step_pin(step), dir_pin(dir), en_pin(en)
 {
     set_high_on_debug(en.port_number, en.pin);
 
-    steps_per_mm         = 1.0F;
-    max_rate             = 50.0F;
-
-    current_position_steps= 0;
-    current_speed = 0.0F;
-    target_speed = 0.0F;
+    X = QV = QQA = 0;
+    s = L = L1 = QV1 = 0;
 
     moving= false;
-    selected= true;
 
     enable(false);
     unstep(); // initialize step pin
@@ -67,10 +66,6 @@ void StepperMotor::on_enable(void *argument)
     }
 }
 
-void StepperMotor::change_steps_per_mm(float new_steps)
-{
-    steps_per_mm = new_steps;
-}
 
 // Does a manual step pulse, used for direct encoder control of a stepper
 // NOTE this is experimental and may change and/or be reomved in the future, it is an unsupported feature.
@@ -92,79 +87,48 @@ void StepperMotor::manual_step(bool dir) {
 
 
     // keep track of actuators actual position in steps
-    this->current_position_steps += (dir ? -1 : 1);
+    this->X += (dir ? 1 : -1);
 }
 
-void StepperMotor::set_speed(float speed) {
+void StepperMotor::set_speed(int speed) {
     if (!is_enabled()) enable(true);
     moving = true;
 
-    target_speed = speed;
+    QVt = speed;
+    updateQA();
 }
 
 void StepperMotor::zero_position() {
-    current_position_steps = 0;
-}
-
-float stop_dist_raw(float v) {
-    return 1.;
-//    return 0.5 * v * v / a_max;
-}
-
-float StepperMotor::stop_dist() {
-    return stop_dist_raw(current_speed);
+    X = 0;
 }
 
 bool StepperMotor::will_crash() {
-    if (direction) {
-        if (current_position_steps <= -l_steps) {
-            return true;
-        }
-        return current_speed > 0 && stop_dist() - current_position_steps >= l_steps;
-    } else {
-        if (current_position_steps >= 0) {
-            return true;
-        }
-        return current_speed < 0 && stop_dist() >= -current_position_steps;
+    return QV*QV >= 2*(is_emptying()?(Xmax-X):X)*QQAmax;
+}
+
+void StepperMotor::updateQA() {
+    QQA = (QVt - QV)/2;
+    if (QQA > QAmax) {
+        QQA = QQAmax;
+    } else if (QQA < -QQAmax) {
+        QQA = -QQAmax;
     }
 }
 
-float time_to_fill_raw(float x, float v, float vm) {
-    return x / vm;
-
-    float rval = 0;
-    float half_time = 0;
-    float v2;
-
-    if (v > 0) {
-        rval += v / a_max;
-        x += stop_dist_raw(v);
-        v = 0;
+// TODO change direction if necessary
+// returns whether or not we stepped the motor
+bool StepperMotor::tick() {
+    s ++; L = L1;
+    QV1 += QA;
+    L1 += 2*QV1 - QV;
+    if (abs(L) < 2*Q && abs(L1) >= 2*Q) {
+        set_direction(L1 > 0);
+        step();
+        QV = QV1; updateQA();
+        s = L = L1 = 0;
+        return true;
     }
-
-    rval += v / a_max;
-    x += 0.5 * v * v / a_max;
-    v = 0;
-
-    half_time = sqrt(x / a_max);
-    v2 = half_time * a_max;
-
-    if (v2 < vm) {
-        rval += 2 * half_time;
-    } else {
-        rval += (x - 2 * vm * vm / a_max) / vm + 2 * (vm / a_max);
-    }
-
-    v2 = vm;
-    rval += x / vm;
-
-    return rval;
+    return false;
 }
 
-float StepperMotor::time_to_fill() {
-    return time_to_fill_raw(-current_position_steps, current_speed, -nv_max);
-}
 
-float StepperMotor::time_to_empty() {
-    return time_to_fill_raw(l_steps + current_position_steps, -current_speed, v_max);
-}

@@ -125,8 +125,8 @@ void Pump::load_config()
             return;
         }
 
-        actuators[a]->change_steps_per_mm(THEKERNEL->config->value(checksums[a][3])->by_default(a == 2 ? 2560.0F : 80.0F)->as_number());
-        actuators[a]->set_max_rate(THEKERNEL->config->value(checksums[a][4])->by_default(30000.0F)->as_number()/60.0F); // it is in mm/min and converted to mm/sec
+//        actuators[a]->change_steps_per_mm(THEKERNEL->config->value(checksums[a][3])->by_default(a == 2 ? 2560.0F : 80.0F)->as_number());
+//        actuators[a]->set_max_rate(THEKERNEL->config->value(checksums[a][4])->by_default(30000.0F)->as_number()/60.0F); // it is in mm/min and converted to mm/sec
 //        actuators[a]->set_acceleration(THEKERNEL->config->value(checksums[a][5])->by_default(NAN)->as_number()); // mm/secs²
     }
 
@@ -154,7 +154,7 @@ int Pump::print_position(uint8_t subcode, char *buf, size_t bufsize) const
 
     for (int i = 0; i < n_motors; ++i) {
         // current actuator position
-        n += snprintf(&buf[n], bufsize-n, " %d:%1.4f", i, actuators[i]->get_current_position());
+//        n += snprintf(&buf[n], bufsize-n, " %d:%1.4f", i, actuators[i]->get_current_position());
     }
 
     return n;
@@ -164,13 +164,14 @@ int Pump::print_position(uint8_t subcode, char *buf, size_t bufsize) const
 // we will override the actuator max_rate if the combination of max_rate and steps/sec exceeds base_stepping_frequency
 void Pump::check_max_actuator_speeds()
 {
+        /*
     for (size_t i = 0; i < n_motors; i++) {
         float step_freq = actuators[i]->get_max_rate() * actuators[i]->get_steps_per_mm();
         if (step_freq > THEKERNEL->base_stepping_frequency) {
             actuators[i]->set_max_rate(floorf(THEKERNEL->base_stepping_frequency / actuators[i]->get_steps_per_mm()));
             THEKERNEL->streams->printf("WARNING: actuator %d rate exceeds base_stepping_frequency * ..._steps_per_mm: %f, setting to %f\n", i, step_freq, actuators[i]->get_max_rate());
         }
-    }
+    } */
 }
 
 void Pump::on_gcode_received(void *argument)

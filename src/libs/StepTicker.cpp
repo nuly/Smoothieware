@@ -1,8 +1,15 @@
 /*
-      This file is part of Smoothie (http://smoothieware.org/). The motion control part is heavily based on Grbl (https://github.com/simen/grbl).
-      Smoothie is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
-      Smoothie is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
-      You should have received a copy of the GNU General Public License along with Smoothie. If not, see <http://www.gnu.org/licenses/>.
+      This file is part of Smoothie (http://smoothieware.org/). The motion
+      control part is heavily based on Grbl (https://github.com/simen/grbl).
+      Smoothie is free software: you can redistribute it and/or modify it under
+      the terms of the GNU General Public License as published by the Free
+      Software Foundation, either version 3 of the License, or (at your option)
+      any later version.  Smoothie is distributed in the hope that it will be
+      useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+      Public License for more details.  You should have received a copy of the
+      GNU General Public License along with Smoothie. If not, see
+      <http://www.gnu.org/licenses/>.
 */
 
 
@@ -18,6 +25,8 @@
 #include <math.h>
 #include <mri.h>
 
+#include "constants.h"
+
 #ifdef STEPTICKER_DEBUG_PIN
 // debug pins, only used if defined in src/makefile
 #include "gpio.h"
@@ -26,14 +35,6 @@ GPIO stepticker_debug_pin(STEPTICKER_DEBUG_PIN);
 #else
 #define SET_STEPTICKER_DEBUG_PIN(n)
 #endif
-
-#define NUM_FORWARD (2)
-
-#define a_max (5.)
-#define v_max (10000.)
-#define nv_max (-10000.)
-#define l_steps (25000.)
-#define INF (v_max+1)
 
 StepTicker *StepTicker::instance;
 
@@ -52,7 +53,7 @@ StepTicker::StepTicker()
     LPC_TIM1->TCR = 0;              // Disable interrupt
 
     // Default start values
-    this->set_frequency(1000);
+    this->set_frequency(100000);
     this->set_unstep_time(100);
 
     this->reverse.reset();
@@ -137,6 +138,32 @@ void StepTicker::handle_finish (void)
     if(finished_fnc) finished_fnc();
 }
 
+#define sq(x) ((x)*(x))
+
+bool
+LongerToFill(StepperMotor* A, StepperMotor* B) {
+    int sigma1, sigma2;
+    sigma1 = A->X * QQAmax + (A->QV)*(A->QV)/2;
+    sigma2 = (Xmax - B->X) * QQAmax - (B->QV)*(B->QV)/2;
+    if (sigma1 >= sq(QVmax) && sigma2 >= sq(QVmax)) {
+        return (sigma1 + A->QV * QVmax) >= (sigma2 - B->QV * QVmax);
+    } else if (sigma1 < sq(QVmax) && sigma2 >= sq(QVmax)) {
+        return sigma2 + sq(QVmax) <= (A->QV + B->QV) * QVmax ||
+            4*sigma1*sq(QVmax) >= sq(sigma2+sq(QVmax)-B->QV*QVmax-A->QV*QVmax);
+    } else if (sigma1 >= sq(QVmax) && sigma2 < sq(QVmax)) {
+        return sigma1 + sq(QVmax) <= -(A->QV + B->QV) * QVmax ||
+            4*sigma2*sq(QVmax) >= sq(sigma1+sq(QVmax)+B->QV*QVmax+A->QV*QVmax);
+    } else {
+        if (A->QV + B->QV < 0 && sq(A->QV + B->QV) >= sigma1) {
+            return false;
+        } else if (4*sigma2 <= 4*sigma1 + sq(A->QV + B->QV)) {
+            return A->QV + B->QV >= 0;
+        } else {
+            return 8*(sigma1+sigma2)*sq(A->QV + B->QV) >= sq(4*sigma2-4*sigma1) + sq(sq(A->QV + B->QV));
+        }
+    }
+}
+
 // step clock
 void StepTicker::step_tick (void)
 {
@@ -151,81 +178,29 @@ void StepTicker::step_tick (void)
     if (pumping) {
         reverse.reset();
         for (uint8_t m = 0; m < num_motors; m++) {
-            if (motor[m]->get_direction() && motor[m]->will_crash()) {
-                reverse.set(m);
-            }
+            if (motor[m]->is_emptying()) {
+                uint8_t mnext = (m+num_motors-1) % num_motors;
 
-            uint8_t mnext = (m+1) % num_motors;
-
-            if (motor[m]->get_direction() && 
-                motor[mnext]->get_direction() &&
-                motor[mnext]->time_to_empty() <= motor[m]->time_to_fill()) {
-                reverse.set(m);
+                if (motor[m]->will_crash() || 
+                        (motor[mnext]->is_emptying() &&
+                         LongerToFill(motor[m], motor[mnext]))) {
+                    reverse.set(m);
+                }
             }
         }
 
         for (uint8_t m = 0; m < num_motors; m++) {
             if (reverse[m]) {
-                uint8_t mprev = (m+num_motors-1)%num_motors;
-                motor[m]->set_direction(false);
-                motor[mprev]->set_direction(true);
+                uint8_t mprev = (m+1)%num_motors;
+                motor[m]->set_speed(-QVmax);
+                motor[mprev]->set_speed(flux_hat/NUM_FORWARD);
             }
         }
 
-        float flux_err = 0, vn;
-        float rflux;
-        for (int ig = 0; ig < 2; ig++) {
-            rflux = 0;
-            for (uint8_t m = 0; m < num_motors; m++) {
-                if (motor[m]->get_direction()) {
-                    vn = (flux_hat + flux_err) / ((float)NUM_FORWARD);
-                } else if (motor[m]->will_crash()) {
-                    vn = 0;
-                } else {
-                    vn = nv_max;
-                }
-
-                if (vn - motor[m]->get_current_speed() > a_max) {
-                    vn = motor[m]->get_current_speed() + a_max;
-                } else if (vn - motor[m]->get_current_speed() < -a_max) {
-                    vn = motor[m]->get_current_speed() - a_max;
-                }
-
-                if (vn > v_max) {
-                    vn = v_max;
-                } else if (vn < nv_max) {
-                    vn = nv_max;
-                }
-
-                if (ig == 1) {
-                    motor[m]->set_current_speed(vn);
-                }
-
-                if (vn > 0) {
-                    rflux += vn;
-                }
-            }
-
-            flux_err = flux_hat - rflux;
-        }
-    } else {
-        float vn, cs;
         for (uint8_t m = 0; m < num_motors; m++) {
-            if (!motor[m]->is_moving()) continue;
-
-            vn = motor[m]->target_speed;
-            cs = motor[m]->current_speed;
-            if (vn - cs > a_max) {
-                vn = cs + a_max;
-            } else if (vn - cs < -a_max) {
-                vn = cs - a_max;
+            if (motor[m]->is_filling() && motor[m]->will_crash()) {
+                motor[m]->set_speed(0);
             }
-            if (vn > v_max) {
-                vn = v_max;
-            } else if (vn < nv_max) {
-                vn = nv_max;
-            }
-            motor[m]->set_current_speed(vn);
         }
     }
 
@@ -235,19 +210,7 @@ void StepTicker::step_tick (void)
             continue;
         }
 
-        // get direction set up
-        motor[m]->last_tick += period;
-        if (motor[m]->last_tick >= frequency) {
-            // time to tick!
-            motor[m]->last_tick %= int(frequency);
-
-            bool cdirection = motor[m]->get_current_speed() > 0;
-
-            if (motor[m]->which_direction() ^ cdirection) {
-                motor[m]->set_direction(cdirection);
-            }
-
-            motor[m]->step();
+        if (motor[m]->tick()) {
             unstep.set(m);
         }
     }
@@ -278,17 +241,15 @@ void StepTicker::manual_step(int i, bool dir) {
     }
 }
 
-void StepTicker::set_speed(int i, float speed) {
+void StepTicker::set_speed(int i, int speed) {
     if (i >= 0 && i < num_motors) {
         motor[i]->set_speed(speed);
-        motor[i]->last_tick = current_tick;
     }
 }
 
-int StepTicker::get_speed(int i) const { return motor[i]->get_speed(); }
-int StepTicker::get_actual_speed(int i) const { return motor[i]->get_actual_speed(); }
-int StepTicker::get_current_step(int i) const { return motor[i]->get_current_step(); }
-int StepTicker::get_current_speed(int i) const { return motor[i]->get_current_speed(); }
+int StepTicker::get_actual_speed(int i) const { return motor[i]->QV; }
+int StepTicker::get_current_step(int i) const { return motor[i]->X; }
+int StepTicker::get_current_speed(int i) const { return motor[i]->QVt; }
 
 void StepTicker::stop() {
     pumping = false;
@@ -297,22 +258,22 @@ void StepTicker::stop() {
     }
 }
 
-void StepTicker::pump_speed(float speed) {
+void StepTicker::pump_speed(int speed) {
     flux_hat = speed;
 
     if (!pumping) {
         pumping = true;
         for (uint8_t m=0; m<num_motors; m++) {
-            motor[m]->set_direction(m>=num_motors-NUM_FORWARD);
+            motor[m]->set_speed(m<NUM_FORWARD ? (flux_hat)/NUM_FORWARD : -QVmax);
         }
     }
 }
 
-float StepTicker::get_pump_speed() {
+int StepTicker::get_pump_speed() {
     float rval = 0;
     for (uint8_t m = 0; m < num_motors; m++) {
-        if (motor[m]->is_moving() && motor[m]->get_direction()) {
-            rval += motor[m]->get_current_speed();
+        if (motor[m]->is_moving() && get_current_speed(m) > 0) {
+            rval += get_current_speed(m);
         }
     }
     return rval;

@@ -46,20 +46,20 @@ class StepTicker{
         static StepTicker *getInstance() { return instance; }
 
         void manual_step(int i, bool dir);
-        void set_speed(int i, float speed);
+        void set_speed(int i, int speed);
 
         int get_num_motors() const { return num_motors; };
         StepperMotor* get_motor(int mi) const { return motor[mi]; };
 
-        int get_speed(int i) const;
         int get_actual_speed(int i) const;
         int get_current_step(int i) const;
         int get_current_speed(int i) const;
 
         void stop();
 
-        void pump_speed(float speed);
-        float get_pump_speed();
+        void pump_speed(int speed);
+        bool is_pumping() const { return pumping; };
+        int get_pump_speed();
         void zero_motors();
 
     private:
