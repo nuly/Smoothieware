@@ -1,5 +1,5 @@
 #define Q (600)
 #define Xmax (16000)
 #define QVmax (200)
-#define QQAmax (1)
+#define QAmax (1)
 #define NUM_FORWARD (2)

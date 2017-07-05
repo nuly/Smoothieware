@@ -142,9 +142,9 @@ void StepTicker::handle_finish (void)
 
 bool
 LongerToFill(StepperMotor* A, StepperMotor* B) {
-    int sigma1, sigma2;
-    sigma1 = A->X * QQAmax + (A->QV)*(A->QV)/2;
-    sigma2 = (Xmax - B->X) * QQAmax - (B->QV)*(B->QV)/2;
+    int64_t sigma1, sigma2;
+    sigma1 = A->X * Q * QAmax + (A->QV)*(A->QV)/2;
+    sigma2 = (Xmax - B->X) * Q * QAmax - (B->QV)*(B->QV)/2;
     if (sigma1 >= sq(QVmax) && sigma2 >= sq(QVmax)) {
         return (sigma1 + A->QV * QVmax) >= (sigma2 - B->QV * QVmax);
     } else if (sigma1 < sq(QVmax) && sigma2 >= sq(QVmax)) {

@@ -48,7 +48,7 @@ class StepperMotor  : public Module {
 
         volatile int X;
         volatile int QV, QVt; // actual and target velocities
-        volatile int QQA;
+        volatile int QA;
         int s, L, L1, QV1;
 
         bool tick();

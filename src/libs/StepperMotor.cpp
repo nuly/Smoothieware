@@ -26,7 +26,7 @@ StepperMotor::StepperMotor(Pin &step, Pin &dir, Pin &en) : step_pin(step), dir_p
 {
     set_high_on_debug(en.port_number, en.pin);
 
-    X = QV = QQA = 0;
+    X = QV = QA = 0;
     s = L = L1 = QV1 = 0;
 
     moving= false;
@@ -103,15 +103,15 @@ void StepperMotor::zero_position() {
 }
 
 bool StepperMotor::will_crash() {
-    return QV*QV >= 2*(is_emptying()?(Xmax-X):X)*QQAmax;
+    return QV*QV >= 2*(is_emptying()?(Xmax-X):X)*Q*QAmax;
 }
 
 void StepperMotor::updateQA() {
-    QQA = (QVt - QV)/2;
-    if (QQA > QAmax) {
-        QQA = QQAmax;
-    } else if (QQA < -QQAmax) {
-        QQA = -QQAmax;
+    QA = (QVt - QV)/2;
+    if (QA > QAmax) {
+        QA = QAmax;
+    } else if (QA < -QAmax) {
+        QA = -QAmax;
     }
 }
 
