@@ -26,6 +26,8 @@
 #include "StepTicker.h"
 #include "Configurator.h"
 
+#include "modules/encoder/RotaryEncoder.h"
+
 #include "NetworkPublicAccess.h"
 #include "platform_memory.h"
 #include "SDFAT.h"
@@ -749,6 +751,10 @@ void SimpleShell::info_command( string parameters, StreamOutput *stream)
                         THEKERNEL->step_ticker->get_pump_speed()
                       );
     }
+
+    stream->printf("shoop: %10d\n", 
+                    RotaryEncoder::instance->get_pos()
+                  );
 
     for (int mi=0; mi<THEKERNEL->step_ticker->get_num_motors(); mi++) {
         stream->printf("motor.%d: %d %d %10d %15d\n", mi,

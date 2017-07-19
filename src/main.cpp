@@ -11,6 +11,7 @@
 #include "modules/utils/configurator/Configurator.h"
 #include "modules/utils/currentcontrol/CurrentControl.h"
 #include "modules/utils/killbutton/KillButton.h"
+#include "modules/encoder/RotaryEncoder.h"
 #include "libs/Network/uip/Network.h"
 #include "modules/pump/Pump.h"
 #include "Config.h"
@@ -110,6 +111,7 @@ void init() {
     // Create and add main modules
     kernel->add_module( new(AHB0) CurrentControl() );
     kernel->add_module( new(AHB0) KillButton() );
+    kernel->add_module( new(AHB0) RotaryEncoder() );
     kernel->add_module( new(AHB0) Pump() );
 
     // these modules can be completely disabled in the Makefile by adding to EXCLUDE_MODULES

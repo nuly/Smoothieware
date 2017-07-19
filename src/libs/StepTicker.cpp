@@ -20,11 +20,13 @@
 #include "libs/Kernel.h"
 #include "StepperMotor.h"
 #include "StreamOutputPool.h"
+#include "modules/encoder/RotaryEncoder.h"
 
 #include "system_LPC17xx.h" // mbed.h lib
 #include <math.h>
 #include <mri.h>
 
+#include "int128.h"
 #include "constants.h"
 
 #ifdef STEPTICKER_DEBUG_PIN
@@ -62,6 +64,9 @@ StepTicker::StepTicker()
 
     this->running = false;
     this->pumping = false;
+    this->zeroing = false;
+
+    this->flux_hat = 0;
 
     #ifdef STEPTICKER_DEBUG_PIN
     // setup debug pin if defined
@@ -80,6 +85,11 @@ void StepTicker::start()
     NVIC_EnableIRQ(TIMER0_IRQn);     // Enable interrupt handler
     NVIC_EnableIRQ(TIMER1_IRQn);     // Enable interrupt handler
     current_tick= 0;
+
+
+    RotaryEncoder::instance->up_attach(this, &StepTicker::on_speed_up);
+    RotaryEncoder::instance->down_attach(this, &StepTicker::on_speed_down);
+
 }
 
 // Set the base stepping frequency
@@ -142,24 +152,26 @@ void StepTicker::handle_finish (void)
 
 bool
 LongerToFill(StepperMotor* A, StepperMotor* B) {
-    int64_t sigma1, sigma2;
+    uint64_t sigma1, sigma2, tmp;
+    uint64_t QVX128 = QVmax;
     sigma1 = A->X * Q * QAmax + (A->QV)*(A->QV)/2;
     sigma2 = (Xmax - B->X) * Q * QAmax - (B->QV)*(B->QV)/2;
-    if (sigma1 >= sq(QVmax) && sigma2 >= sq(QVmax)) {
-        return (sigma1 + A->QV * QVmax) >= (sigma2 - B->QV * QVmax);
-    } else if (sigma1 < sq(QVmax) && sigma2 >= sq(QVmax)) {
-        return sigma2 + sq(QVmax) <= (A->QV + B->QV) * QVmax ||
-            4*sigma1*sq(QVmax) >= sq(sigma2+sq(QVmax)-B->QV*QVmax-A->QV*QVmax);
-    } else if (sigma1 >= sq(QVmax) && sigma2 < sq(QVmax)) {
-        return sigma1 + sq(QVmax) <= -(A->QV + B->QV) * QVmax ||
-            4*sigma2*sq(QVmax) >= sq(sigma1+sq(QVmax)+B->QV*QVmax+A->QV*QVmax);
+    if (sigma1 >= sq(QVX128) && sigma2 >= sq(QVX128)) {
+        return (sigma1 + QVX128 * A->QV) >= (sigma2 - QVX128 * B->QV);
+    } else if (sigma1 < sq(QVX128) && sigma2 >= sq(QVX128)) {
+        return sigma2 + sq(QVX128) <= QVX128 * (A->QV + B->QV) ||
+            sigma1*sq(QVX128)*4 >= sq(sigma2+sq(QVX128)-QVX128*B->QV-QVX128*A->QV);
+    } else if (sigma1 >= sq(QVX128) && sigma2 < sq(QVX128)) {
+        return ((-A->QV - B->QV) > 0 && sigma1 + sq(QVX128) <= QVX128 * (-A->QV - B->QV)) ||
+            sigma2*sq(QVX128)*4 >= sq(sigma1+sq(QVX128)+QVX128*B->QV+QVX128*A->QV);
     } else {
-        if (A->QV + B->QV < 0 && sq(A->QV + B->QV) >= sigma1) {
+        tmp = sq(A->QV + B->QV);
+        if (A->QV + B->QV < 0 && sigma1 <= tmp) {
             return false;
-        } else if (4*sigma2 <= 4*sigma1 + sq(A->QV + B->QV)) {
+        } else if (sigma2*4 <= sigma1*4 + tmp) {
             return A->QV + B->QV >= 0;
         } else {
-            return 8*(sigma1+sigma2)*sq(A->QV + B->QV) >= sq(4*sigma2-4*sigma1) + sq(sq(A->QV + B->QV));
+            return (sigma1+sigma2)*tmp*8 >= sq(sigma2*4-sigma1*4) + sq(tmp);
         }
     }
 }
@@ -199,6 +211,12 @@ void StepTicker::step_tick (void)
 
         for (uint8_t m = 0; m < num_motors; m++) {
             if (motor[m]->is_filling() && motor[m]->will_crash()) {
+                motor[m]->set_speed(0);
+            }
+        }
+    } else if (zeroing) {
+        for (uint8_t m = 0; m < num_motors; m++) {
+            if (motor[m]->will_crash()) {
                 motor[m]->set_speed(0);
             }
         }
@@ -247,12 +265,33 @@ void StepTicker::set_speed(int i, int speed) {
     }
 }
 
+uint32_t StepTicker::on_speed_up(uint32_t dummy) {
+    if (flux_hat + QVDELTA > QVmax) {
+        flux_hat = QVmax;
+    } else {
+        flux_hat += QVDELTA;
+    }
+    this->pump_speed(flux_hat);
+    return 0;
+}
+
+uint32_t StepTicker::on_speed_down(uint32_t dummy) {
+    if (flux_hat - QVDELTA < 0) {
+        flux_hat = 0;
+    } else {
+        flux_hat -= QVDELTA;
+    }
+    this->pump_speed(flux_hat);
+    return 0;
+}
+
 int StepTicker::get_actual_speed(int i) const { return motor[i]->QV; }
 int StepTicker::get_current_step(int i) const { return motor[i]->X; }
 int StepTicker::get_current_speed(int i) const { return motor[i]->QVt; }
 
 void StepTicker::stop() {
     pumping = false;
+    zeroing = true;
     for (uint8_t m = 0; m < num_motors; m++) {
         motor[m]->stop_moving();
     }
@@ -261,10 +300,25 @@ void StepTicker::stop() {
 void StepTicker::pump_speed(int speed) {
     flux_hat = speed;
 
-    if (!pumping) {
-        pumping = true;
+    if (flux_hat > 0) {
+        if (!pumping) {
+            pumping = true;
+            for (uint8_t m=0; m<num_motors; m++) {
+                motor[m]->set_speed(m<NUM_FORWARD ? (flux_hat)/NUM_FORWARD : -QVmax);
+            }
+        } else {
+            for (uint8_t m=0; m<num_motors; m++) {
+                if (motor[m]->is_emptying()) {
+                    motor[m]->set_speed((flux_hat)/NUM_FORWARD);
+                }
+            }
+        }
+    } else {
+        // retract
+        pumping = false;
+        zeroing = true;
         for (uint8_t m=0; m<num_motors; m++) {
-            motor[m]->set_speed(m<NUM_FORWARD ? (flux_hat)/NUM_FORWARD : -QVmax);
+            motor[m]->set_speed(-QVmax);
         }
     }
 }
@@ -278,7 +332,6 @@ int StepTicker::get_pump_speed() {
     }
     return rval;
 }
-
 
 void StepTicker::zero_motors() {
     for (uint8_t m=0; m<num_motors; m++) {

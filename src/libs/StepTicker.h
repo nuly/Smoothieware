@@ -62,6 +62,9 @@ class StepTicker{
         int get_pump_speed();
         void zero_motors();
 
+        uint32_t on_speed_up(uint32_t dummy);
+        uint32_t on_speed_down(uint32_t dummy);
+
     private:
         static StepTicker *instance;
 
@@ -77,6 +80,7 @@ class StepTicker{
         struct {
             volatile bool running:1;
             volatile bool pumping:1;
+            volatile bool zeroing:1;
             uint8_t num_motors:4;
         };
 };
