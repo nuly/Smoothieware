@@ -90,7 +90,7 @@ void StepperMotor::manual_step(bool dir) {
     this->X += (dir ? 1 : -1);
 }
 
-void StepperMotor::set_speed(int speed) {
+void StepperMotor::set_speed(int64_t speed) {
     if (!is_enabled()) enable(true);
     moving = true;
 
@@ -103,7 +103,7 @@ void StepperMotor::zero_position() {
 }
 
 bool StepperMotor::will_crash() {
-    return QV*QV >= 2*(is_emptying()?(Xmax-X):X)*Q*QAmax;
+    return 10*QV*QV >= 30*(is_emptying()?(Xmax-X):X)*Q*QAmax;
 }
 
 void StepperMotor::updateQA() {
@@ -130,5 +130,3 @@ bool StepperMotor::tick() {
     }
     return false;
 }
-
-

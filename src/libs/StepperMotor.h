@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <stdint.h>
+
 #include "Module.h"
 #include "Pin.h"
 
@@ -33,23 +35,23 @@ class StepperMotor  : public Module {
         void stop_moving() { moving= false; };
 
         void manual_step(bool dir);
-        void set_speed(int speed);
-        int get_speed() const { return QVt; };
-        int get_actual_speed() const { return QV; };
+        void set_speed(int64_t speed);
+        int64_t get_speed() const { return QVt; };
+        int64_t get_actual_speed() const { return QV; };
 
         inline bool which_direction() const { return direction; }
 
-        uint32_t get_current_step(void) const { return X; }
+        int64_t get_current_step(void) const { return X; }
 
         inline bool is_emptying() { return QVt > 0; }
         inline bool is_filling() { return QVt <= 0; }
 
         void zero_position();
 
-        volatile int X;
-        volatile int QV, QVt; // actual and target velocities
-        volatile int QA;
-        int s, L, L1, QV1;
+        volatile int64_t X;
+        volatile int64_t QV, QVt; // actual and target velocities
+        volatile int64_t QA;
+        int64_t s, L, L1, QV1;
 
         bool tick();
         bool will_crash();

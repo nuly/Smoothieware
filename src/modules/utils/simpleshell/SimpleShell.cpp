@@ -747,8 +747,8 @@ void SimpleShell::zero_command( string parameters, StreamOutput *stream)
 void SimpleShell::info_command( string parameters, StreamOutput *stream)
 {
     if(THEKERNEL->step_ticker->is_pumping()) {
-        stream->printf("pump: %10d\n", 
-                        THEKERNEL->step_ticker->get_pump_speed()
+        stream->printf("pump: %10ld\n", 
+                        (int32_t)(THEKERNEL->step_ticker->get_pump_speed())
                       );
     }
 
@@ -757,11 +757,11 @@ void SimpleShell::info_command( string parameters, StreamOutput *stream)
                   );
 
     for (int mi=0; mi<THEKERNEL->step_ticker->get_num_motors(); mi++) {
-        stream->printf("motor.%d: %d %d %10d %15d\n", mi,
+        stream->printf("motor.%d: %d %d %10ld %15ld\n", mi,
                 THEKERNEL->step_ticker->get_motor(mi)->get_direction(),
                 THEKERNEL->step_ticker->get_motor(mi)->will_crash() ? 1 : 0,
-                THEKERNEL->step_ticker->get_current_speed(mi),
-                THEKERNEL->step_ticker->get_current_step(mi)
+                (int32_t)(THEKERNEL->step_ticker->get_current_speed(mi)),
+                (int32_t)(THEKERNEL->step_ticker->get_current_step(mi))
                 );
     }
 }

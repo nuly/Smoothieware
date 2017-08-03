@@ -46,20 +46,20 @@ class StepTicker{
         static StepTicker *getInstance() { return instance; }
 
         void manual_step(int i, bool dir);
-        void set_speed(int i, int speed);
+        void set_speed(int i, int64_t speed);
 
         int get_num_motors() const { return num_motors; };
         StepperMotor* get_motor(int mi) const { return motor[mi]; };
 
-        int get_actual_speed(int i) const;
-        int get_current_step(int i) const;
-        int get_current_speed(int i) const;
+        int64_t get_actual_speed(int i) const;
+        int64_t get_current_step(int i) const;
+        int64_t get_current_speed(int i) const;
 
         void stop();
 
-        void pump_speed(int speed);
+        void pump_speed(int64_t speed);
         bool is_pumping() const { return pumping; };
-        int get_pump_speed();
+        int64_t get_pump_speed();
         void zero_motors();
 
         uint32_t on_speed_up(uint32_t dummy);
@@ -70,7 +70,7 @@ class StepTicker{
 
         float frequency;
         uint32_t period;
-        float flux_hat;
+        int64_t flux_hat;
         std::array<StepperMotor*, k_max_actuators> motor;
         std::bitset<k_max_actuators> unstep;
         std::bitset<k_max_actuators> reverse;
