@@ -55,8 +55,8 @@ StepTicker::StepTicker()
     LPC_TIM1->TCR = 0;              // Disable interrupt
 
     // Default start values
-    this->set_frequency(1000);
-    this->set_unstep_time(100);
+    this->set_frequency(10000);
+    this->set_unstep_time(3);
 
     this->reverse.reset();
     this->unstep.reset();
@@ -152,7 +152,7 @@ void StepTicker::handle_finish (void)
 
 bool
 LongerToFill(StepperMotor* A, StepperMotor* B) {
-    return 11*(A->X + B->X) > 10*Xmax;
+    return (A->X + B->X) > Xmax;
 }
 
 /*

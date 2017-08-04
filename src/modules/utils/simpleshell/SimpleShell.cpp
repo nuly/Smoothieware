@@ -86,6 +86,7 @@ const SimpleShell::ptentry_t SimpleShell::commands_table[] = {
     {"stop",     SimpleShell::stop_command},
     {"pump",     SimpleShell::pump_command},
     {"zero",     SimpleShell::zero_command},
+    {"s",        SimpleShell::multiple_speed_command},
 
     // unknown command
     {NULL, NULL}
@@ -728,6 +729,18 @@ void SimpleShell::speed_command( string parameters, StreamOutput *stream)
     int speed = speed_str.empty() ? 0 : atoi(speed_str.c_str());
     stream->printf("set speed of motor %d to %d\n", mi, speed);
     THEKERNEL->step_ticker->set_speed(mi, speed);
+}
+
+void SimpleShell::multiple_speed_command( string parameters, StreamOutput *stream)
+{
+    string speed_str;
+    int speed;
+    for (int mi=0; mi<THEKERNEL->step_ticker->get_num_motors(); mi++) {
+        speed_str = shift_parameter( parameters );
+        speed = speed_str.empty() ? 0 : atoi(speed_str.c_str());
+        stream->printf("set speed of motor %d to %d\n", mi, speed);
+        THEKERNEL->step_ticker->set_speed(mi, speed);
+    }
 }
 
 void SimpleShell::pump_command( string parameters, StreamOutput *stream)

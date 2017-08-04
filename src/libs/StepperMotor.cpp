@@ -26,7 +26,7 @@ StepperMotor::StepperMotor(Pin &step, Pin &dir, Pin &en) : step_pin(step), dir_p
 {
     set_high_on_debug(en.port_number, en.pin);
 
-    X = QV = QA = 0;
+    X = QV = QA = QVt = 0;
     s = L = L1 = QV1 = 0;
 
     moving= false;
@@ -60,7 +60,6 @@ void StepperMotor::on_enable(void *argument)
     uint32_t bm= (uint32_t)argument;
     if(bm == 0x01) {
         enable(true);
-
     }else if(bm == 0 || ((bm&0x01) == 0 && ((bm&(0x02<<motor_id)) != 0)) ) {
         enable(false);
     }
@@ -103,11 +102,12 @@ void StepperMotor::zero_position() {
 }
 
 bool StepperMotor::will_crash() {
-    return 10*QV*QV >= 30*(is_emptying()?(Xmax-X):X)*Q*QAmax;
+//    return 10*QV*QV >= 30*(is_emptying()?(Xmax-X):X)*Q*QAmax;
+    return is_emptying()?(Xmax<=X):(X<=0);
 }
 
 void StepperMotor::updateQA() {
-    QA = (QVt - QV)/2;
+    QA = QVt - QV;
     if (QA > QAmax) {
         QA = QAmax;
     } else if (QA < -QAmax) {
@@ -118,13 +118,16 @@ void StepperMotor::updateQA() {
 // TODO change direction if necessary
 // returns whether or not we stepped the motor
 bool StepperMotor::tick() {
-    s ++; L = L1;
+    s ++;
     QV1 += QA;
-    L1 += 2*QV1 - QV;
-    if (abs(L) < 2*Q && abs(L1) >= 2*Q) {
+    L = L1;
+//    L1 += 2*QV1 - QV;
+    L1 = s * QV;
+//    if (abs(L) < 2*Q && abs(L1) >= 2*Q) {
+    if (abs(L) < Q && abs(L1) >= Q) {
         set_direction(L1 > 0);
         step();
-        QV = QV1; updateQA();
+        updateQA();
         s = L = L1 = 0;
         return true;
     }
