@@ -20,7 +20,7 @@
 #include "libs/Kernel.h"
 #include "StepperMotor.h"
 #include "StreamOutputPool.h"
-#include "modules/encoder/RotaryEncoder.h"
+//#include "modules/encoder/RotaryEncoder.h"
 
 #include "system_LPC17xx.h" // mbed.h lib
 #include <math.h>

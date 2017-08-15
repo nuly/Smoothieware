@@ -103,27 +103,33 @@ void StepperMotor::zero_position() {
 
 bool StepperMotor::will_crash() {
 //    return 10*QV*QV >= 30*(is_emptying()?(Xmax-X):X)*Q*QAmax;
-    return is_emptying()?(Xmax<=X):(X<=0);
+//    return is_emptying()?(Xmax<=X):(X<=0);
+    return is_emptying()?(Xmax<=X+QV/QA):(X+QV/QA<=0);
 }
 
 void StepperMotor::updateQA() {
+    /*
     QA = QVt - QV;
     if (QA > QAmax) {
         QA = QAmax;
     } else if (QA < -QAmax) {
         QA = -QAmax;
     }
+    */
+    QA = QVt - QV;
+    if (QA > QAmax) {
+        QA = QAmax;
+    } else if (QA < -QAmax) {
+        QA = -QAmax;
+    }
+    QV = QVt + QA;
 }
 
 // TODO change direction if necessary
 // returns whether or not we stepped the motor
 bool StepperMotor::tick() {
     s ++;
-    QV1 += QA;
-    L = L1;
-//    L1 += 2*QV1 - QV;
-    L1 = s * QV;
-//    if (abs(L) < 2*Q && abs(L1) >= 2*Q) {
+    L = L1; L1 = s * QV;
     if (abs(L) < Q && abs(L1) >= Q) {
         set_direction(L1 > 0);
         step();

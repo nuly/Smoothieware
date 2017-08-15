@@ -12,6 +12,7 @@
 #include "libs/utils.h"
 #include "libs/SerialMessage.h"
 #include "libs/StreamOutput.h"
+#include "libs/Heater.h"
 #include "DirHandle.h"
 #include "mri.h"
 #include "version.h"
@@ -87,6 +88,7 @@ const SimpleShell::ptentry_t SimpleShell::commands_table[] = {
     {"pump",     SimpleShell::pump_command},
     {"zero",     SimpleShell::zero_command},
     {"s",        SimpleShell::multiple_speed_command},
+    {"h",        SimpleShell::set_heater_delay},
 
     // unknown command
     {NULL, NULL}
@@ -729,6 +731,16 @@ void SimpleShell::speed_command( string parameters, StreamOutput *stream)
     int speed = speed_str.empty() ? 0 : atoi(speed_str.c_str());
     stream->printf("set speed of motor %d to %d\n", mi, speed);
     THEKERNEL->step_ticker->set_speed(mi, speed);
+}
+
+void SimpleShell::set_heater_delay( string parameters, StreamOutput *stream)
+{
+    string delay_str;
+    int delay;
+    delay_str = shift_parameter( parameters );
+    delay = delay_str.empty() ? 0 : atoi(delay_str.c_str());
+    stream->printf("set heater delay to %d\n", delay);
+    Heater::getInstance()->set_delay_us(delay);
 }
 
 void SimpleShell::multiple_speed_command( string parameters, StreamOutput *stream)

@@ -11,7 +11,7 @@
 #include "modules/utils/configurator/Configurator.h"
 #include "modules/utils/currentcontrol/CurrentControl.h"
 #include "modules/utils/killbutton/KillButton.h"
-#include "modules/encoder/RotaryEncoder.h"
+//#include "modules/encoder/RotaryEncoder.h"
 #include "libs/Network/uip/Network.h"
 #include "modules/pump/Pump.h"
 #include "Config.h"
@@ -19,6 +19,7 @@
 #include "ConfigValue.h"
 #include "StepTicker.h"
 #include "SlowTicker.h"
+#include "Heater.h"
 
 // #include "libs/ChaNFSSD/SDFileSystem.h"
 #include "libs/nuts_bolts.h"
@@ -37,11 +38,14 @@
 
 #include "libs/Watchdog.h"
 
+#include "libs/Adc.h"
+
 #include "version.h"
 #include "system_LPC17xx.h"
 #include "platform_memory.h"
 
 #include "mbed.h"
+#include "libs/constants.h"
 
 #define second_usb_serial_enable_checksum  CHECKSUM("second_usb_serial_enable")
 #define disable_msd_checksum  CHECKSUM("msd_disable")
@@ -72,8 +76,36 @@ GPIO leds[5] = {
     GPIO(P4_28)
 };
 
-void init() {
+class PotReader {
+    public:
+        Pin pot_pin;
 
+    uint32_t pot_read_tick(uint32_t dummy) {
+        float pot_val = THEKERNEL->adc->read(&(this->pot_pin))/((float)THEKERNEL->adc->get_max_value());
+        int64_t speed = 0;
+        if (pot_val < 1.) {
+            if (pot_val < 0.01) {
+                THEKERNEL->step_ticker->pump_speed(0);
+            } else {
+                speed = (4.7/(1. - pot_val) - 4.7) * QVmax / 10.;
+                THEKERNEL->step_ticker->pump_speed(speed);
+            }
+        }
+        return 0;
+    }
+
+    void pot_read_init() {
+        this->pot_pin.from_string("0.25");
+        THEKERNEL->adc->enable_pin(&(this->pot_pin));
+        THEKERNEL->slow_ticker->attach(20, this, &PotReader::pot_read_tick);
+    }
+};
+
+PotReader PR;
+
+volatile int zccnt = 0;
+
+void init() {
     // Default pins to low status
     for (int i = 0; i < 5; i++){
         leds[i].output();
@@ -111,7 +143,7 @@ void init() {
     // Create and add main modules
     kernel->add_module( new(AHB0) CurrentControl() );
     kernel->add_module( new(AHB0) KillButton() );
-    kernel->add_module( new(AHB0) RotaryEncoder() );
+//    kernel->add_module( new(AHB0) RotaryEncoder() );
     kernel->add_module( new(AHB0) Pump() );
 
     // these modules can be completely disabled in the Makefile by adding to EXCLUDE_MODULES
@@ -181,18 +213,21 @@ void init() {
         }
     }
 
+//    PR.pot_read_init();
+
+    Heater* heater = new Heater();
+
     // start the timers and interrupts
     THEKERNEL->step_ticker->start();
     THEKERNEL->slow_ticker->start();
 }
 
-int main()
-{
+int main() {
     init();
 
     uint16_t cnt= 0;
     // Main loop
-    while(1){
+    while(1) {
         if(THEKERNEL->is_using_leds()) {
             // flash led 2 to show we are alive
             leds[1]= (cnt++ & 0x1000) ? 1 : 0;

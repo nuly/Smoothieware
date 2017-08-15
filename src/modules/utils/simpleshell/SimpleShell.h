@@ -67,6 +67,7 @@ private:
     static void pump_command( string parameters, StreamOutput *stream);
     static void zero_command( string parameters, StreamOutput *stream);
     static void multiple_speed_command( string parameters, StreamOutput *stream);
+    static void set_heater_delay( string parameters, StreamOutput *stream);
 
     typedef void (*PFUNC)(string parameters, StreamOutput *stream);
     typedef struct {
