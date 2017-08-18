@@ -16,6 +16,7 @@
 #include <atomic>
 
 #include "TSRingBuffer.h"
+#include "Pin.h"
 
 class StepperMotor;
 
@@ -25,6 +26,13 @@ class StepperMotor;
 #define STEPTICKER_FROMFP(x) ((float)(x)/STEPTICKER_FPSCALE)
 
 #define k_max_actuators 6
+
+typedef enum {
+    ST_HOME,
+    ST_DISABLE,
+    ST_PUMP,
+    ST_MANUAL
+} TickerState;
 
 class StepTicker{
     public:
@@ -58,15 +66,20 @@ class StepTicker{
         void stop();
 
         void pump_speed(int64_t speed);
-        bool is_pumping() const { return pumping; };
+        bool is_pumping() const { return state == ST_PUMP; };
         int64_t get_pump_speed();
         void zero_motors();
 
         uint32_t on_speed_up(uint32_t dummy);
         uint32_t on_speed_down(uint32_t dummy);
 
+        void set_state(TickerState new_state);
+        TickerState get_state();
+
     private:
         static StepTicker *instance;
+
+        TickerState state;
 
         float frequency;
         uint32_t period;
@@ -79,8 +92,9 @@ class StepTicker{
 
         struct {
             volatile bool running:1;
-            volatile bool pumping:1;
-            volatile bool zeroing:1;
             uint8_t num_motors:4;
         };
+
+        Pin pump_rocker;
+        Pin endstops[k_max_actuators];
 };

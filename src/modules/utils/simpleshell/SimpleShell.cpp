@@ -771,15 +771,14 @@ void SimpleShell::zero_command( string parameters, StreamOutput *stream)
 
 void SimpleShell::info_command( string parameters, StreamOutput *stream)
 {
+    stream->printf("state: %d\n", 
+                    THEKERNEL->step_ticker->get_state()
+                  );
     if(THEKERNEL->step_ticker->is_pumping()) {
         stream->printf("pump: %10ld\n", 
                         (int32_t)(THEKERNEL->step_ticker->get_pump_speed())
                       );
     }
-
-    stream->printf("shoop: %10d\n", 
-                    RotaryEncoder::instance->get_pos()
-                  );
 
     for (int mi=0; mi<THEKERNEL->step_ticker->get_num_motors(); mi++) {
         stream->printf("motor.%d: %d %d %10ld %15ld\n", mi,

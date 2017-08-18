@@ -18,9 +18,9 @@
 #include "libs/nuts_bolts.h"
 #include "libs/Module.h"
 #include "libs/Kernel.h"
+#include "libs/Heater.h"
 #include "StepperMotor.h"
 #include "StreamOutputPool.h"
-//#include "modules/encoder/RotaryEncoder.h"
 
 #include "system_LPC17xx.h" // mbed.h lib
 #include <math.h>
@@ -28,6 +28,7 @@
 
 #include "int128.h"
 #include "constants.h"
+#include "libs/Adc.h"
 
 #ifdef STEPTICKER_DEBUG_PIN
 // debug pins, only used if defined in src/makefile
@@ -63,8 +64,6 @@ StepTicker::StepTicker()
     this->num_motors = 0;
 
     this->running = false;
-    this->pumping = false;
-    this->zeroing = false;
 
     this->flux_hat = 0;
 
@@ -73,6 +72,18 @@ StepTicker::StepTicker()
     stepticker_debug_pin.output();
     stepticker_debug_pin= 0;
     #endif
+
+    this->pump_rocker.from_string("0.23");
+    this->pump_rocker.as_input();
+    this->pump_rocker.pull_up();
+
+    this->endstops[0].from_string("1.27");
+    this->endstops[1].from_string("1.28");
+    this->endstops[2].from_string("1.29");
+    for(int i=0; i<3; i++) {
+        this->endstops[i].as_input();
+        this->endstops[i].pull_up();
+    }
 }
 
 StepTicker::~StepTicker()
@@ -82,14 +93,49 @@ StepTicker::~StepTicker()
 //called when everything is setup and interrupts can start
 void StepTicker::start()
 {
+    set_state(ST_HOME);
+
+
     NVIC_EnableIRQ(TIMER0_IRQn);     // Enable interrupt handler
     NVIC_EnableIRQ(TIMER1_IRQn);     // Enable interrupt handler
     current_tick= 0;
+}
 
-#ifdef ROTARY_ENCODER_H
-    RotaryEncoder::instance->up_attach(this, &StepTicker::on_speed_up);
-    RotaryEncoder::instance->down_attach(this, &StepTicker::on_speed_down);
-#endif
+void StepTicker::set_state(TickerState new_state) {
+    Heater::enable(new_state == ST_PUMP);
+
+    switch(new_state) {
+        case ST_DISABLE:
+            for (int i = 0; i < num_motors; i++) {
+                this->motor[i]->enable(false);
+                this->motor[i]->stop_moving();
+            }
+            break;
+        case ST_PUMP:
+            if (state != ST_PUMP) {
+                for (uint8_t m=0; m<NUM_PUMPING; m++) {
+                    motor[m]->set_speed(m<NUM_FORWARD ? (flux_hat)/NUM_FORWARD : -QVmax);
+                }
+            } else {
+                for (uint8_t m=0; m<NUM_PUMPING; m++) {
+                    if (motor[m]->is_emptying()) {
+                        motor[m]->set_speed((flux_hat)/NUM_FORWARD);
+                    }
+                }
+            }
+        case ST_HOME:
+        case ST_MANUAL:
+            for (int i = 0; i < num_motors; i++) {
+                this->motor[i]->enable(true);
+                this->motor[i]->start_moving();
+            }
+            break;
+    }
+    state = new_state;
+}
+
+TickerState StepTicker::get_state() {
+    return state;
 }
 
 // Set the base stepping frequency
@@ -148,7 +194,6 @@ void StepTicker::handle_finish (void)
     if(finished_fnc) finished_fnc();
 }
 
-#define sq(x) ((x)*(x))
 
 bool
 LongerToFill(StepperMotor* A, StepperMotor* B) {
@@ -156,6 +201,8 @@ LongerToFill(StepperMotor* A, StepperMotor* B) {
 }
 
 /*
+#define sq(x) ((x)*(x))
+
 bool
 LongerToFill(StepperMotor* A, StepperMotor* B) {
     uint64_t sigma1, sigma2, tmp;
@@ -210,39 +257,74 @@ void StepTicker::step_tick (void)
         return;
     }
 
-    if (pumping) {
-        reverse.reset();
-        for (uint8_t m = 0; m < NUM_PUMPING; m++) {
-            if (motor[m]->is_emptying()) {
-                uint8_t mnext = (m+NUM_PUMPING-1) % NUM_PUMPING;
+    // state transitions
+    switch (state) {
+        case ST_PUMP:
+            if (!pump_rocker.get()) {
+                set_state(ST_HOME);
+            }
+            break;
+        case ST_DISABLE:
+        case ST_HOME:
+        default:
+            if (pump_rocker.get()) {
+                set_state(ST_PUMP);
+            }
+            break;
+    }
 
-                if (motor[m]->will_crash() || 
-                        (motor[mnext]->is_emptying() &&
-                         LongerToFill(motor[m], motor[mnext]))) {
-                    reverse.set(m);
+    bool donehoming;
+
+    switch (state) {
+        case ST_PUMP:
+            reverse.reset();
+            for (uint8_t m = 0; m < NUM_PUMPING; m++) {
+                if (motor[m]->is_emptying()) {
+                    uint8_t mnext = (m+NUM_PUMPING-1) % NUM_PUMPING;
+
+                    if (motor[m]->will_crash() || 
+                            (motor[mnext]->is_emptying() &&
+                             LongerToFill(motor[m], motor[mnext]))) {
+                        reverse.set(m);
+                    }
                 }
             }
-        }
 
-        for (uint8_t m = 0; m < NUM_PUMPING; m++) {
-            if (reverse[m]) {
-                uint8_t mprev = (m+1)%NUM_PUMPING;
-                motor[m]->set_speed(-QVmax);
-                motor[mprev]->set_speed(flux_hat/NUM_FORWARD);
+            for (uint8_t m = 0; m < NUM_PUMPING; m++) {
+                if (reverse[m]) {
+                    uint8_t mprev = (m+1)%NUM_PUMPING;
+                    motor[m]->set_speed(-QVmax);
+                    motor[mprev]->set_speed(flux_hat/NUM_FORWARD);
+                }
             }
-        }
 
-        for (uint8_t m = 0; m < NUM_PUMPING; m++) {
-            if (motor[m]->is_filling() && motor[m]->will_crash()) {
-                motor[m]->set_speed(motor[m]->get_speed()/2);
+            for (uint8_t m = 0; m < NUM_PUMPING; m++) {
+                if (motor[m]->is_filling() && motor[m]->will_crash()) {
+                    motor[m]->set_speed(motor[m]->get_speed()/2);
+                }
             }
-        }
-    } else if (zeroing) {
-        for (uint8_t m = 0; m < num_motors; m++) {
-            if (motor[m]->will_crash()) {
-                motor[m]->set_speed(motor[m]->get_speed()/2);
+            break;
+
+        case ST_HOME:
+            donehoming = true;
+            for (uint8_t m = 0; m < num_motors; m++) {
+                if (endstops[m].get()) {
+                    motor[m]->set_speed(-QVmax);
+                    donehoming = false;
+                } else {
+                    motor[m]->set_speed(0);
+                }
             }
-        }
+            if (donehoming) {
+                for (uint8_t m=0; m<num_motors; m++) {
+                    motor[m]->zero_position();
+                }
+                set_state(ST_DISABLE);
+            }
+            break;
+
+        default:
+            break;
     }
 
     // for each motor
@@ -313,37 +395,21 @@ int64_t StepTicker::get_current_step(int i) const { return motor[i]->X; }
 int64_t StepTicker::get_current_speed(int i) const { return motor[i]->QVt; }
 
 void StepTicker::stop() {
-    pumping = false;
-    zeroing = true;
-    for (uint8_t m = 0; m < num_motors; m++) {
-        motor[m]->stop_moving();
-    }
+    set_state(ST_HOME);
 }
 
 void StepTicker::pump_speed(int64_t speed) {
     flux_hat = speed;
-
-    if (flux_hat > 0) {
-        if (!pumping) {
-            pumping = true;
-            for (uint8_t m=0; m<NUM_PUMPING; m++) {
-                motor[m]->set_speed(m<NUM_FORWARD ? (flux_hat)/NUM_FORWARD : -QVmax);
-            }
-        } else {
-            for (uint8_t m=0; m<NUM_PUMPING; m++) {
-                if (motor[m]->is_emptying()) {
-                    motor[m]->set_speed((flux_hat)/NUM_FORWARD);
-                }
-            }
-        }
-    } else {
-        // retract
-        pumping = false;
-        zeroing = true;
-        for (uint8_t m=0; m<NUM_PUMPING; m++) {
-            motor[m]->set_speed(-QVmax);
-        }
+    if (this->state == ST_PUMP) {
+        this->set_state(ST_PUMP);
     }
+    /*
+    if (flux_hat > 0) {
+        this->set_state(ST_PUMP);
+    } else {
+        this->set_state(ST_HOME);
+    }
+    */
 }
 
 int64_t StepTicker::get_pump_speed() {

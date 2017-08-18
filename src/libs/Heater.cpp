@@ -5,6 +5,7 @@
 #include "system_LPC17xx.h" // mbed.h lib
 
 Heater *Heater::instance;
+bool Heater::heat_enabled = false;
 
 Heater::Heater() {
     instance = this; // setup the Singleton instance of the heater
@@ -37,13 +38,19 @@ Heater::set_delay_us(int microseconds) {
 }
 
 void Heater::ip_rose() {
-    Heater::getInstance()->heater_disable();
+    Heater::getInstance()->heater_phase_wait();
 
-    LPC_TIM3->TCR = 3;  // Reset
-    LPC_TIM3->TCR = 1;  // Reset
+    if (heat_enabled) {
+        LPC_TIM3->TCR = 3;  // Reset
+        LPC_TIM3->TCR = 1;  // Reset
+    }
+}
+
+void Heater::enable(bool enable_flag) {
+    heat_enabled = enable_flag;
 }
 
 extern "C" void TIMER3_IRQHandler (void) {
     LPC_TIM3->IR |= 1 << 0;          // Clear MR0 interrupt flag
-    Heater::getInstance()->heater_enable();
+    Heater::getInstance()->heater_phase_start();
 }

@@ -36,9 +36,8 @@
 #include "libs/SDFAT.h"
 #include "StreamOutputPool.h"
 
-#include "libs/Watchdog.h"
-
 #include "libs/Adc.h"
+#include "libs/Watchdog.h"
 
 #include "version.h"
 #include "system_LPC17xx.h"
@@ -76,27 +75,66 @@ GPIO leds[5] = {
     GPIO(P4_28)
 };
 
+#define TOP_R  4.7
+#define MAX_R  10.
+
+#define HEATINVLEN 20
+
+float HEATINV[] = 
+{
+1.0, 0.79804, 0.74109, 0.69896, 0.66368, 0.63237, 0.60358, 0.57645, 0.55042, 0.52505, 0.5, 0.47495, 0.44958, 0.42355, 0.39642, 0.36763, 0.33632, 0.30104, 0.25891, 0.20196, 0.
+};
+
+float HEATINVF(float powfact) {
+    int idx = powfact * HEATINVLEN;
+    float di = powfact * HEATINVLEN - idx;
+    return HEATINV[idx] * (1 - di) + HEATINV[idx+1] * di;
+}
+
 class PotReader {
     public:
-        Pin pot_pin;
+        Pin speed_pot;
+        Pin temp_pot;
 
     uint32_t pot_read_tick(uint32_t dummy) {
-        float pot_val = THEKERNEL->adc->read(&(this->pot_pin))/((float)THEKERNEL->adc->get_max_value());
+        float speed_pot_val = 1 - Adc::instance->read(&(this->speed_pot))/((float)Adc::instance->get_max_value());
         int64_t speed = 0;
-        if (pot_val < 1.) {
-            if (pot_val < 0.01) {
-                THEKERNEL->step_ticker->pump_speed(0);
-            } else {
-                speed = (4.7/(1. - pot_val) - 4.7) * QVmax / 10.;
-                THEKERNEL->step_ticker->pump_speed(speed);
-            }
+        if (speed_pot_val < 0.) {
+            speed_pot_val = 0.;
+        } else if (speed_pot_val >= MAX_R/(TOP_R + MAX_R)) {
+            speed_pot_val = MAX_R/(TOP_R + MAX_R);
         }
+        speed_pot_val = 1 - speed_pot_val; // [4.7/14.7, 1]
+        speed_pot_val = (TOP_R/speed_pot_val - TOP_R)/MAX_R;
+        speed = speed_pot_val * QVmax;
+        StepTicker::getInstance()->pump_speed(speed);
+
+        // forward is 0, backward is 1
+        float heater_pot_val = 1 - Adc::instance->read(&(this->temp_pot))/((float)Adc::instance->get_max_value());
+        int32_t heater = 0;
+        if (heater_pot_val < 0.) {
+            heater_pot_val = 0.;
+        } else if (heater_pot_val >= MAX_R/(TOP_R + MAX_R)) {
+            heater_pot_val = MAX_R/(TOP_R + MAX_R);
+        }
+        heater_pot_val = 1 - heater_pot_val;
+        heater_pot_val = (TOP_R/heater_pot_val - TOP_R) / MAX_R;
+
+        heater_pot_val = HEATINVF(speed_pot_val * heater_pot_val);
+
+        heater = 8333 * heater_pot_val;
+
+        Heater::getInstance()->set_delay_us(heater);
+
         return 0;
     }
 
     void pot_read_init() {
-        this->pot_pin.from_string("0.25");
-        THEKERNEL->adc->enable_pin(&(this->pot_pin));
+        this->speed_pot.from_string("0.25");
+        this->temp_pot.from_string("0.24");
+
+        Adc::instance->enable_pin(&(this->speed_pot));
+        Adc::instance->enable_pin(&(this->temp_pot));
         THEKERNEL->slow_ticker->attach(20, this, &PotReader::pot_read_tick);
     }
 };
@@ -213,7 +251,7 @@ void init() {
         }
     }
 
-//    PR.pot_read_init();
+    PR.pot_read_init();
 
     Heater* heater = new Heater();
 
