@@ -8,6 +8,7 @@ Heater *Heater::instance;
 bool Heater::heat_enabled = false;
 
 Heater::Heater() {
+    /*
     instance = this; // setup the Singleton instance of the heater
 
     this->ZeroPin.from_string("0.27");
@@ -30,6 +31,7 @@ Heater::Heater() {
 
     this->ZeroPin.interrupt_pin()->rise(Heater::ip_rose);
     NVIC_EnableIRQ(TIMER3_IRQn);    // Enable interrupt handler
+    */
 }
 
 void

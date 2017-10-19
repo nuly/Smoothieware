@@ -19,7 +19,8 @@
 #include "ConfigValue.h"
 #include "StepTicker.h"
 #include "SlowTicker.h"
-#include "Heater.h"
+//#include "Heater.h"
+#include "HT16K33.h"
 
 // #include "libs/ChaNFSSD/SDFileSystem.h"
 #include "libs/nuts_bolts.h"
@@ -38,6 +39,8 @@
 
 #include "libs/Adc.h"
 #include "libs/Watchdog.h"
+
+#include "I2C.h"
 
 #include "version.h"
 #include "system_LPC17xx.h"
@@ -124,7 +127,7 @@ class PotReader {
 
         heater = 8333 * heater_pot_val;
 
-        Heater::getInstance()->set_delay_us(heater);
+//        Heater::getInstance()->set_delay_us(heater);
 
         return 0;
     }
@@ -139,9 +142,13 @@ class PotReader {
     }
 };
 
-PotReader PR;
+//PotReader PR;
 
 volatile int zccnt = 0;
+
+mbed::I2C* i2c;
+//HT16K33* disps[8];
+SevenSeg* disp;
 
 void init() {
     // Default pins to low status
@@ -179,8 +186,8 @@ void init() {
 #endif
 
     // Create and add main modules
-    kernel->add_module( new(AHB0) CurrentControl() );
-    kernel->add_module( new(AHB0) KillButton() );
+//    kernel->add_module( new(AHB0) CurrentControl() );
+//    kernel->add_module( new(AHB0) KillButton() );
 //    kernel->add_module( new(AHB0) RotaryEncoder() );
     kernel->add_module( new(AHB0) Pump() );
 
@@ -251,25 +258,123 @@ void init() {
         }
     }
 
-    PR.pot_read_init();
+//    PR.pot_read_init();
+//    Heater* heater = new Heater();
 
-    Heater* heater = new Heater();
+    i2c = new mbed::I2C(P0_27, P0_28);
+    /*
+    for (char x=0; x<8; x++) {
+        disps[x] = new HT16K33(i2c, x);
+        disps[x]->init();
+    }
+    */
+
+    disp = new SevenSeg(i2c, 2);
+    disp->init();
+    disp->print_nuli();
 
     // start the timers and interrupts
     THEKERNEL->step_ticker->start();
     THEKERNEL->slow_ticker->start();
+
+    /*
+    for (int y=0; y<10000; y++) {
+        for (char x=2; x<6; x+=8) {
+            disps[x]->flush_int();
+        }
+        sprintf(buf, "%04d", y);
+        for (char x=2; x<6; x+=8) {
+            disps[x]->setmem(0, numbertable[buf[0]-'0']); //
+            disps[x]->setmem(2, numbertable[buf[1]-'0']); //
+            disps[x]->setmem(6, numbertable[buf[2]-'0']); //
+            disps[x]->setmem(8, numbertable[buf[3]-'0']); // N
+            disps[x]->repaint();
+        }
+        for (char x=0; x<8; x++) {
+            disps[x]->setmem(0, 0x00); //
+            disps[x]->setmem(2, 0x00); //
+            disps[x]->setmem(6, 0x00); //
+            disps[x]->setmem(8, 0x37); // N
+            disps[x]->repaint();
+        }
+        wait(0.1);
+        for (char x=0; x<8; x++) {
+            disps[x]->setmem(0, 0x00); //
+            disps[x]->setmem(2, 0x00); //
+            disps[x]->setmem(6, 0x37); // N
+            disps[x]->setmem(8, 0x3E); // U
+            disps[x]->repaint();
+        }
+        wait(0.1);
+        for (char x=0; x<8; x++) {
+            disps[x]->setmem(0, 0x00); //
+            disps[x]->setmem(2, 0x37); // N
+            disps[x]->setmem(6, 0x3E); // U
+            disps[x]->setmem(8, 0x38); // L
+            disps[x]->repaint();
+        }
+        wait(0.1);
+        for (char x=0; x<8; x++) {
+            disps[x]->setmem(0, 0x37); // N
+            disps[x]->setmem(2, 0x3E); // U
+            disps[x]->setmem(6, 0x38); // L
+            disps[x]->setmem(8, 0x30); // I
+            disps[x]->repaint();
+        }
+        wait(0.3);
+        for (char x=0; x<8; x++) {
+            disps[x]->setmem(0, 0x3E); // U
+            disps[x]->setmem(2, 0x38); // L
+            disps[x]->setmem(6, 0x30); // I
+            disps[x]->setmem(8, 0x00); //
+            disps[x]->repaint();
+        }
+        wait(0.1);
+        for (char x=0; x<8; x++) {
+            disps[x]->setmem(0, 0x38); // L
+            disps[x]->setmem(2, 0x30); // I
+            disps[x]->setmem(6, 0x00); //
+            disps[x]->setmem(8, 0x00); //
+            disps[x]->repaint();
+        }
+        wait(0.1);
+        for (char x=0; x<8; x++) {
+            disps[x]->setmem(0, 0x30); // I
+            disps[x]->setmem(2, 0x00); //
+            disps[x]->setmem(6, 0x00); //
+            disps[x]->setmem(8, 0x00); //
+            disps[x]->repaint();
+        }
+        wait(0.1);
+        for (char x=0; x<8; x++) {
+            disps[x]->setmem(0, 0x00); //
+            disps[x]->setmem(2, 0x00); //
+            disps[x]->setmem(6, 0x00); //
+            disps[x]->setmem(8, 0x00); //
+            disps[x]->repaint();
+        }
+    }
+    */
 }
 
 int main() {
     init();
 
     uint16_t cnt= 0;
+    int ledcnt= -999;
+    char buf[128];
+
     // Main loop
     while(1) {
         if(THEKERNEL->is_using_leds()) {
             // flash led 2 to show we are alive
             leds[1]= (cnt++ & 0x1000) ? 1 : 0;
         }
+
+        if (cnt % 1000 == 0) {
+            disp->print(ledcnt+=10);
+        }
+
         THEKERNEL->call_event(ON_MAIN_LOOP);
         THEKERNEL->call_event(ON_IDLE);
     }
