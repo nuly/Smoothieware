@@ -29,6 +29,14 @@ class SevenSeg: public HT16K33 {
         void set_dot(int);
         int idx(int);
         void print(int val);
+        void print(double val);
         void print(float val);
-        void print(char *buf);
+        void print(const char *buf);
+};
+
+class BarGraph: public HT16K33 {
+    public: 
+        BarGraph(mbed::I2C *i2c, char addr) : HT16K33(i2c, addr) { };
+        void set_vals(char[3], char[3]);
+        void set_val(int);
 };

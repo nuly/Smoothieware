@@ -148,7 +148,9 @@ volatile int zccnt = 0;
 
 mbed::I2C* i2c;
 //HT16K33* disps[8];
-SevenSeg* disp;
+SevenSeg* numdisp;
+//HT16K33* disp;
+BarGraph* bardisp;
 
 void init() {
     // Default pins to low status
@@ -269,9 +271,10 @@ void init() {
     }
     */
 
-    disp = new SevenSeg(i2c, 2);
-    disp->init();
-    disp->print_nuli();
+    numdisp = new SevenSeg(i2c, 2);
+    numdisp->init();
+    bardisp = new BarGraph(i2c, 0);
+    bardisp->init();
 
     // start the timers and interrupts
     THEKERNEL->step_ticker->start();
@@ -361,8 +364,7 @@ int main() {
     init();
 
     uint16_t cnt= 0;
-    int ledcnt= -999;
-    char buf[128];
+    uint32_t lcnt= 0;
 
     // Main loop
     while(1) {
@@ -371,8 +373,26 @@ int main() {
             leds[1]= (cnt++ & 0x1000) ? 1 : 0;
         }
 
-        if (cnt % 1000 == 0) {
-            disp->print(ledcnt+=10);
+        if (cnt % 50000 == 0) {
+            lcnt += 1; lcnt %= (51 * 3);
+            // first four bits of 0th byte are the
+//            disp->setmem(0, lcnt & 0xFF);         // bottom of first (red)
+//            disp->setmem(2, lcnt & 0xFF);         // bottom of first (red)
+//            disp->setmem(4, lcnt & 0xFF);         // bottom of first (red)
+//            disp->setmem(1, (lcnt >> 8) & 0xFF);  // bottom of second (red)
+//            disp->setmem(3, (lcnt >> 8) & 0xFF); //           green
+//            disp->setmem(5, (lcnt >> 8) & 0xFF); //           green
+
+            numdisp->print("    NULI    " + (lcnt % 9));
+            numdisp->repaint();
+
+            if (lcnt <= 25)
+                bardisp->set_val(lcnt);
+            else
+                bardisp->set_val(51 - lcnt);
+            bardisp->repaint();
+
+//            disp->print((ledcnt += 100)*0.01F);
         }
 
         THEKERNEL->call_event(ON_MAIN_LOOP);

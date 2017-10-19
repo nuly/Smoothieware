@@ -84,7 +84,7 @@ int SevenSeg::idx(int oidx) {
 }
 
 void SevenSeg::set_dot(int oidx) {
-    setmem(idx(oidx), getmem(idx(oidx)) & 0x80);
+    setmem(idx(oidx), getmem(idx(oidx)) | 0x80);
 }
 
 void SevenSeg::set_char(int oidx, char val) {
@@ -148,22 +148,35 @@ void SevenSeg::set_char(int oidx, char val) {
 
 void SevenSeg::print(int val) {
     char buf[10];
+    int xp = 0;
     if (val > -1000 && val < 10000) {
         sprintf(buf, "%4.4d", val);
         print(buf);
     } else {
-        sprintf(buf, "%4g", val);
+        while (val > 100 || -val < -10) {
+            val /= 10; xp += 1;
+        }
+        sprintf(buf, "%dE%d", val, xp);
         print(buf);
     }
 }
 
-void SevenSeg::print(float val) {
-    char buf[10];
-    sprintf(buf, "%f", val);
-    print(buf);
+
+void SevenSeg::print(double val) {
+    print((float)val);
 }
 
-void SevenSeg::print(char *buf) {
+void SevenSeg::print(float val) {
+    char buf[10];
+    if (val <= -1000 || val >= 10000) {
+        print((int)val);
+    } else {
+        sprintf(buf, "%f", val);
+        print(buf);
+    }
+}
+
+void SevenSeg::print(const char *buf) {
     int i, j;
     for (i=0, j=0; i<4 && j<10; j++) {
         if (buf[j] == '\0') break;
@@ -181,4 +194,23 @@ void SevenSeg::print(char *buf) {
         set_char(i, ' ');
     }
     repaint();
+}
+
+void BarGraph::set_vals(char r[3], char g[3]) {
+    // red LEDs
+    this->setmem(0, (r[1] & 0xF0)        | (r[0] & 0x0F));
+    this->setmem(2, ((r[2] & 0x0F) << 4) | ((r[0] & 0xF0) >> 4));
+    this->setmem(4, (r[2] & 0xF0)        | (r[1] & 0x0F));
+
+    this->setmem(1, (g[1] & 0xF0)        | (g[0] & 0x0F));
+    this->setmem(3, ((g[2] & 0x0F) << 4) | ((g[0] & 0xF0) >> 4));
+    this->setmem(5, (g[2] & 0xF0)        | (g[1] & 0x0F));
+}
+
+void BarGraph::set_val(int val) {
+    char r[] = {0x00, 0x00, 0x00}, g[] = {0x00, 0x00, 0x00};
+    for (int i=0; i<val; i++) {
+        r[i/8] |= 0x01 << (i % 8);
+    }
+    set_vals(r, g);
 }
