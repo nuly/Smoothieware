@@ -73,9 +73,8 @@ void StepperMotor::manual_step(bool dir) {
     if(!is_enabled()) enable(true);
 
     // set direction if needed
-    if(this->direction != dir) {
-        this->direction= dir;
-        this->dir_pin.set(dir);
+    if(get_direction() != dir) {
+        set_direction(dir);
         wait_us(1);
     }
 

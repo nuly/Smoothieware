@@ -32,10 +32,9 @@ class SlowTicker : public Module{
         void tick();
         // For some reason this can't go in the .cpp, see :  http://mbed.org/forum/mbed/topic/2774/?page=1#comment-14221
         // TODO replace this with std::function()
-        template<typename T> Hook* attach( uint32_t frequency, T *optr, uint32_t ( T::*fptr )( uint32_t ) ){
-            Hook* hook = new Hook();
+
+        Hook* attach( uint32_t frequency, Hook* hook ){
             hook->interval = floorf((SystemCoreClock/4)/frequency);
-            hook->attach(optr, fptr);
             hook->countdown = hook->interval;
 
             // to avoid race conditions we must stop the interupts before updating this non thread safe vector
@@ -47,7 +46,19 @@ class SlowTicker : public Module{
             this->hooks.push_back(hook);
             __enable_irq();
             return hook;
-        }
+        };
+
+        template<typename T> Hook* attach( uint32_t frequency, T *optr, uint32_t ( T::*fptr )( uint32_t ) ){
+            Hook* hook = new Hook();
+            hook->attach(optr, fptr);
+            return this->attach(frequency, hook);
+        };
+
+        Hook* attach( uint32_t frequency, uint32_t (*fptr)(uint32_t) ){
+            Hook* hook = new Hook();
+            hook->attach(fptr);
+            return this->attach(frequency, hook);
+        };
 
     private:
         bool flag_1s();

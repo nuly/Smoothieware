@@ -6,12 +6,13 @@
 */
 
 #include "libs/Kernel.h"
+#include "libs/constants.h"
 
 #include "modules/utils/simpleshell/SimpleShell.h"
 #include "modules/utils/configurator/Configurator.h"
 #include "modules/utils/currentcontrol/CurrentControl.h"
 #include "modules/utils/killbutton/KillButton.h"
-//#include "modules/encoder/RotaryEncoder.h"
+#include "modules/encoder/RotaryEncoder.h"
 #include "libs/Network/uip/Network.h"
 #include "modules/pump/Pump.h"
 #include "Config.h"
@@ -19,7 +20,8 @@
 #include "ConfigValue.h"
 #include "StepTicker.h"
 #include "SlowTicker.h"
-//#include "Heater.h"
+#include "PotReader.h"
+#include "Heater.h"
 #include "HT16K33.h"
 
 // #include "libs/ChaNFSSD/SDFileSystem.h"
@@ -37,7 +39,6 @@
 #include "libs/SDFAT.h"
 #include "StreamOutputPool.h"
 
-#include "libs/Adc.h"
 #include "libs/Watchdog.h"
 
 #include "I2C.h"
@@ -78,79 +79,18 @@ GPIO leds[5] = {
     GPIO(P4_28)
 };
 
-#define TOP_R  4.7
-#define MAX_R  10.
-
-#define HEATINVLEN 20
-
-float HEATINV[] = 
-{
-1.0, 0.79804, 0.74109, 0.69896, 0.66368, 0.63237, 0.60358, 0.57645, 0.55042, 0.52505, 0.5, 0.47495, 0.44958, 0.42355, 0.39642, 0.36763, 0.33632, 0.30104, 0.25891, 0.20196, 0.
-};
-
-float HEATINVF(float powfact) {
-    int idx = powfact * HEATINVLEN;
-    float di = powfact * HEATINVLEN - idx;
-    return HEATINV[idx] * (1 - di) + HEATINV[idx+1] * di;
-}
-
-class PotReader {
-    public:
-        Pin speed_pot;
-        Pin temp_pot;
-
-    uint32_t pot_read_tick(uint32_t dummy) {
-        float speed_pot_val = 1 - Adc::instance->read(&(this->speed_pot))/((float)Adc::instance->get_max_value());
-        int64_t speed = 0;
-        if (speed_pot_val < 0.) {
-            speed_pot_val = 0.;
-        } else if (speed_pot_val >= MAX_R/(TOP_R + MAX_R)) {
-            speed_pot_val = MAX_R/(TOP_R + MAX_R);
-        }
-        speed_pot_val = 1 - speed_pot_val; // [4.7/14.7, 1]
-        speed_pot_val = (TOP_R/speed_pot_val - TOP_R)/MAX_R;
-        speed = speed_pot_val * QVmax;
-        StepTicker::getInstance()->pump_speed(speed);
-
-        // forward is 0, backward is 1
-        float heater_pot_val = 1 - Adc::instance->read(&(this->temp_pot))/((float)Adc::instance->get_max_value());
-        int32_t heater = 0;
-        if (heater_pot_val < 0.) {
-            heater_pot_val = 0.;
-        } else if (heater_pot_val >= MAX_R/(TOP_R + MAX_R)) {
-            heater_pot_val = MAX_R/(TOP_R + MAX_R);
-        }
-        heater_pot_val = 1 - heater_pot_val;
-        heater_pot_val = (TOP_R/heater_pot_val - TOP_R) / MAX_R;
-
-        heater_pot_val = HEATINVF(speed_pot_val * heater_pot_val);
-
-        heater = 8333 * heater_pot_val;
-
-//        Heater::getInstance()->set_delay_us(heater);
-
-        return 0;
-    }
-
-    void pot_read_init() {
-        this->speed_pot.from_string("0.25");
-        this->temp_pot.from_string("0.24");
-
-        Adc::instance->enable_pin(&(this->speed_pot));
-        Adc::instance->enable_pin(&(this->temp_pot));
-        THEKERNEL->slow_ticker->attach(20, this, &PotReader::pot_read_tick);
-    }
-};
-
-//PotReader PR;
-
 volatile int zccnt = 0;
 
 mbed::I2C* i2c;
-//HT16K33* disps[8];
-SevenSeg* numdisp;
-//HT16K33* disp;
-BarGraph* bardisp;
+SevenSeg *tempdisp, *tempadisp, *flowdisp;
+BarGraph* bardisp[3];
+
+
+//RotaryEncoder* RE;
+//PotReader* PR;
+Heater* heater;
+
+uint32_t disp_update(uint32_t);
 
 void init() {
     // Default pins to low status
@@ -188,9 +128,8 @@ void init() {
 #endif
 
     // Create and add main modules
-//    kernel->add_module( new(AHB0) CurrentControl() );
-//    kernel->add_module( new(AHB0) KillButton() );
-//    kernel->add_module( new(AHB0) RotaryEncoder() );
+    kernel->add_module( new(AHB0) CurrentControl() );
+    kernel->add_module( new(AHB0) KillButton() );
     kernel->add_module( new(AHB0) Pump() );
 
     // these modules can be completely disabled in the Makefile by adding to EXCLUDE_MODULES
@@ -233,6 +172,30 @@ void init() {
     // memory before cache is cleared
     //SimpleShell::print_mem(kernel->streams);
 
+    RE = new RotaryEncoder();
+    PR = new PotReader(RE);
+    heater = new Heater();
+
+    leds[1] = 1;
+
+    i2c = new mbed::I2C(P0_27, P0_28);
+    tempdisp = new SevenSeg(i2c, 1); // wrong should be 1
+    tempdisp->init();
+    tempadisp = new SevenSeg(i2c, 5);
+    leds[3] = 1;
+    tempadisp->init();
+    flowdisp = new SevenSeg(i2c, 3);
+    flowdisp->init();
+
+    leds[2] = 1;
+
+    bardisp[0] = new BarGraph(i2c, 0);
+    bardisp[0]->init();
+    bardisp[1] = new BarGraph(i2c, 2); // wrong should be 2
+    bardisp[1]->init();
+    bardisp[2] = new BarGraph(i2c, 4);
+    bardisp[2]->init();
+
     // clear up the config cache to save some memory
     kernel->config->config_cache_clear();
 
@@ -260,111 +223,40 @@ void init() {
         }
     }
 
-//    PR.pot_read_init();
-//    Heater* heater = new Heater();
-
-    i2c = new mbed::I2C(P0_27, P0_28);
-    /*
-    for (char x=0; x<8; x++) {
-        disps[x] = new HT16K33(i2c, x);
-        disps[x]->init();
-    }
-    */
-
-    numdisp = new SevenSeg(i2c, 2);
-    numdisp->init();
-    bardisp = new BarGraph(i2c, 0);
-    bardisp->init();
+    THEKERNEL->slow_ticker->attach(10, disp_update);
 
     // start the timers and interrupts
     THEKERNEL->step_ticker->start();
     THEKERNEL->slow_ticker->start();
+}
 
-    /*
-    for (int y=0; y<10000; y++) {
-        for (char x=2; x<6; x+=8) {
-            disps[x]->flush_int();
+int globcnt = 0;
+
+uint32_t
+disp_update(uint32_t dummy) {
+    for (int i=0; i<3; i++) {
+        if (THEKERNEL->step_ticker->get_current_step(i) <= 0) {
+            bardisp[i]->all_green();
+        } else {
+            bardisp[i]->set_val((THEKERNEL->step_ticker->get_current_step(i) * 25) / Xmax);
         }
-        sprintf(buf, "%04d", y);
-        for (char x=2; x<6; x+=8) {
-            disps[x]->setmem(0, numbertable[buf[0]-'0']); //
-            disps[x]->setmem(2, numbertable[buf[1]-'0']); //
-            disps[x]->setmem(6, numbertable[buf[2]-'0']); //
-            disps[x]->setmem(8, numbertable[buf[3]-'0']); // N
-            disps[x]->repaint();
-        }
-        for (char x=0; x<8; x++) {
-            disps[x]->setmem(0, 0x00); //
-            disps[x]->setmem(2, 0x00); //
-            disps[x]->setmem(6, 0x00); //
-            disps[x]->setmem(8, 0x37); // N
-            disps[x]->repaint();
-        }
-        wait(0.1);
-        for (char x=0; x<8; x++) {
-            disps[x]->setmem(0, 0x00); //
-            disps[x]->setmem(2, 0x00); //
-            disps[x]->setmem(6, 0x37); // N
-            disps[x]->setmem(8, 0x3E); // U
-            disps[x]->repaint();
-        }
-        wait(0.1);
-        for (char x=0; x<8; x++) {
-            disps[x]->setmem(0, 0x00); //
-            disps[x]->setmem(2, 0x37); // N
-            disps[x]->setmem(6, 0x3E); // U
-            disps[x]->setmem(8, 0x38); // L
-            disps[x]->repaint();
-        }
-        wait(0.1);
-        for (char x=0; x<8; x++) {
-            disps[x]->setmem(0, 0x37); // N
-            disps[x]->setmem(2, 0x3E); // U
-            disps[x]->setmem(6, 0x38); // L
-            disps[x]->setmem(8, 0x30); // I
-            disps[x]->repaint();
-        }
-        wait(0.3);
-        for (char x=0; x<8; x++) {
-            disps[x]->setmem(0, 0x3E); // U
-            disps[x]->setmem(2, 0x38); // L
-            disps[x]->setmem(6, 0x30); // I
-            disps[x]->setmem(8, 0x00); //
-            disps[x]->repaint();
-        }
-        wait(0.1);
-        for (char x=0; x<8; x++) {
-            disps[x]->setmem(0, 0x38); // L
-            disps[x]->setmem(2, 0x30); // I
-            disps[x]->setmem(6, 0x00); //
-            disps[x]->setmem(8, 0x00); //
-            disps[x]->repaint();
-        }
-        wait(0.1);
-        for (char x=0; x<8; x++) {
-            disps[x]->setmem(0, 0x30); // I
-            disps[x]->setmem(2, 0x00); //
-            disps[x]->setmem(6, 0x00); //
-            disps[x]->setmem(8, 0x00); //
-            disps[x]->repaint();
-        }
-        wait(0.1);
-        for (char x=0; x<8; x++) {
-            disps[x]->setmem(0, 0x00); //
-            disps[x]->setmem(2, 0x00); //
-            disps[x]->setmem(6, 0x00); //
-            disps[x]->setmem(8, 0x00); //
-            disps[x]->repaint();
-        }
+        bardisp[i]->repaint();
     }
-    */
+
+//    tempdisp->print(RotaryEncoder::get_pos());
+    
+    tempdisp->print(globcnt);
+    tempdisp->repaint();
+    tempadisp->print_nuli(); tempadisp->repaint();
+    flowdisp->print_nuli();  flowdisp->repaint();
+
+    return 0;
 }
 
 int main() {
     init();
 
     uint16_t cnt= 0;
-    uint32_t lcnt= 0;
 
     // Main loop
     while(1) {
@@ -373,29 +265,11 @@ int main() {
             leds[1]= (cnt++ & 0x1000) ? 1 : 0;
         }
 
-        if (cnt % 50000 == 0) {
-            lcnt += 1; lcnt %= (51 * 3);
-            // first four bits of 0th byte are the
-//            disp->setmem(0, lcnt & 0xFF);         // bottom of first (red)
-//            disp->setmem(2, lcnt & 0xFF);         // bottom of first (red)
-//            disp->setmem(4, lcnt & 0xFF);         // bottom of first (red)
-//            disp->setmem(1, (lcnt >> 8) & 0xFF);  // bottom of second (red)
-//            disp->setmem(3, (lcnt >> 8) & 0xFF); //           green
-//            disp->setmem(5, (lcnt >> 8) & 0xFF); //           green
-
-            numdisp->print("    NULI    " + (lcnt % 9));
-            numdisp->repaint();
-
-            if (lcnt <= 25)
-                bardisp->set_val(lcnt);
-            else
-                bardisp->set_val(51 - lcnt);
-            bardisp->repaint();
-
-//            disp->print((ledcnt += 100)*0.01F);
-        }
+        if (cnt == 0x1000) globcnt ++;
 
         THEKERNEL->call_event(ON_MAIN_LOOP);
         THEKERNEL->call_event(ON_IDLE);
     }
+
+    return 0;
 }

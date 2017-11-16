@@ -21,12 +21,16 @@ class StepperMotor  : public Module {
         uint8_t get_motor_id() const { return motor_id; }
 
         // called from step ticker ISR
-        inline bool step() { step_pin.set(1); X += (direction?1:-1); return moving; }
+        inline bool step() { step_pin.set(1); X += (get_direction()?1:-1); return moving; }
         // called from unstep ISR
         inline void unstep() { step_pin.set(0); }
         // called from step ticker ISR
-        inline void set_direction(bool f) { dir_pin.set(f); direction= f; }
-        bool get_direction() const { return direction; }
+
+        // ALI REVERSED THIS
+        // ah, the importance of abstractions. make this flippable?
+        inline void set_direction(bool f) { dir_pin.set(!f); direction= !f; }
+        inline bool get_direction() const { return !direction; }
+        inline bool which_direction() const { return !direction; }
 
         void enable(bool state) { en_pin.set(!state); };
         bool is_enabled() const { return !en_pin.get(); };
@@ -38,8 +42,6 @@ class StepperMotor  : public Module {
         void set_speed(int64_t speed);
         int64_t get_speed() const { return QVt; };
         int64_t get_actual_speed() const { return QV; };
-
-        inline bool which_direction() const { return direction; }
 
         int64_t get_current_step(void) const { return X; }
 

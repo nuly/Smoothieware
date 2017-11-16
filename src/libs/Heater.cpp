@@ -1,5 +1,10 @@
-
 #include "Heater.h"
+
+#include "libs/Kernel.h"
+
+#include "Config.h"
+#include "checksumm.h"
+#include "ConfigValue.h"
 
 #include "mbed.h"
 #include "system_LPC17xx.h" // mbed.h lib
@@ -8,15 +13,19 @@ Heater *Heater::instance;
 bool Heater::heat_enabled = false;
 
 Heater::Heater() {
-    /*
     instance = this; // setup the Singleton instance of the heater
 
-    this->ZeroPin.from_string("0.27");
-    this->ZeroPin.as_input();
-    this->ZeroPin.pull_up();
-    this->HeaterPin.from_string("0.28");
-    this->HeaterPin.as_output();
-    this->HeaterPin.set(0);
+    this->ZeroPin.from_string(
+                    THEKERNEL->config->value(CHECKSUM("zero_pin"))
+                    ->by_default("2.11")->as_string()
+                    )
+            ->as_input()->pull_up();
+
+    this->HeaterPin.from_string(
+                    THEKERNEL->config->value(CHECKSUM("heater0_pin"))
+                    ->by_default("3.26")->as_string()
+                    )
+            ->as_output()->set(0);
 
     LPC_SC->PCONP |= (1<<23); // Enable Timer 3
 
@@ -31,7 +40,6 @@ Heater::Heater() {
 
     this->ZeroPin.interrupt_pin()->rise(Heater::ip_rose);
     NVIC_EnableIRQ(TIMER3_IRQn);    // Enable interrupt handler
-    */
 }
 
 void

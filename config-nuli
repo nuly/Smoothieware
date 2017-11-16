@@ -28,7 +28,7 @@ junction_deviation                           0.05             # Similar to the o
 
 # Stepper module configuration
 microseconds_per_step_pulse                  1                # Duration of step pulses to stepper drivers, in microseconds
-base_stepping_frequency                      10000           # Base frequency for stepping
+base_stepping_frequency                      10000            # Base frequency for stepping
 
 # Cartesian axis speed limits
 x_axis_max_speed                             6000              # mm/min
@@ -130,7 +130,7 @@ laser_module_enable                          false            # Whether to activ
 
 ## Temperature control configuration
 # First hotend configuration
-temperature_control.hotend.enable            true             # Whether to activate this ( "hotend" ) module at all.
+temperature_control.hotend.enable            false             # Whether to activate this ( "hotend" ) module at all.
                                                               # All configuration is ignored if false.
 temperature_control.hotend.thermistor_pin    0.23             # Pin for the thermistor to read
 temperature_control.hotend.heater_pin        2.7              # Pin that controls the heater, set to nc if a readonly thermistor is being defined
@@ -181,7 +181,7 @@ temperature_control.bed.designator           B                #
                                                               # when using bang bang
 
 ## Switch module for fan control
-switch.fan.enable                            true             #
+switch.fan.enable                            false             #
 switch.fan.input_on_command                  M106             #
 switch.fan.input_off_command                 M107             #
 switch.fan.output_pin                        2.6              #

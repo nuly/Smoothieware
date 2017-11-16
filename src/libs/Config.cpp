@@ -116,11 +116,11 @@ ConfigValue *Config::value(uint16_t check_sums[])
     ConfigValue *result = this->config_cache->lookup(check_sums);
 
     if(result == NULL) {
-        // create a dummy value for this to play with, each call requires it's own value not a shared one
-        // result= new ConfigValue(check_sums);
-        // config_cache->add(result);
-        dummyValue.clear();
-        result = &dummyValue;
+        // create a dummy value for this to play with, each call requires its own value not a shared one
+        result= new ConfigValue(check_sums);
+        config_cache->add(result);
+//        dummyValue.clear();
+//        result = &dummyValue;
     }
 
     return result;

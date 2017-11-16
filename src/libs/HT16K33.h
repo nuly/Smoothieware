@@ -39,4 +39,5 @@ class BarGraph: public HT16K33 {
         BarGraph(mbed::I2C *i2c, char addr) : HT16K33(i2c, addr) { };
         void set_vals(char[3], char[3]);
         void set_val(int);
+        void all_green();
 };

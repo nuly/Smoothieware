@@ -30,6 +30,10 @@
 #include "constants.h"
 #include "libs/Adc.h"
 
+#include "Config.h"
+#include "checksumm.h"
+#include "ConfigValue.h"
+
 #ifdef STEPTICKER_DEBUG_PIN
 // debug pins, only used if defined in src/makefile
 #include "gpio.h"
@@ -73,17 +77,23 @@ StepTicker::StepTicker()
     stepticker_debug_pin= 0;
     #endif
 
-    this->pump_rocker.from_string("0.23");
-    this->pump_rocker.as_input();
-    this->pump_rocker.pull_up();
+    this->pump_rocker.from_string(
+                    THEKERNEL->config->value(CHECKSUM("pump_sw"))
+                    ->by_default("0.23")->as_string())
+        ->as_input()->pull_up();
 
-    this->endstops[0].from_string("1.27");
-    this->endstops[1].from_string("1.28");
-    this->endstops[2].from_string("1.29");
-    for(int i=0; i<3; i++) {
-        this->endstops[i].as_input();
-        this->endstops[i].pull_up();
-    }
+    this->endstops[0].from_string(
+                    THEKERNEL->config->value(CHECKSUM("endstop0"))
+                    ->by_default("1.27")->as_string())
+        ->as_input()->pull_up();
+    this->endstops[1].from_string(
+                    THEKERNEL->config->value(CHECKSUM("endstop1"))
+                    ->by_default("1.28")->as_string())
+        ->as_input()->pull_up();
+    this->endstops[2].from_string(
+                    THEKERNEL->config->value(CHECKSUM("endstop2"))
+                    ->by_default("1.29")->as_string())
+        ->as_input()->pull_up();
 }
 
 StepTicker::~StepTicker()

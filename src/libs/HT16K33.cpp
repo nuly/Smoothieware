@@ -214,3 +214,8 @@ void BarGraph::set_val(int val) {
     }
     set_vals(r, g);
 }
+
+void BarGraph::all_green() {
+    char r[] = {0x00, 0x00, 0x00}, g[] = {0xFF, 0xFF, 0xFF};
+    set_vals(r, g);
+}

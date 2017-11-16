@@ -1,23 +1,29 @@
 #ifndef ROTARY_ENCODER_H
 #define ROTARY_ENCODER_H
 
-#include "Module.h"
 #include "Pin.h"
 
+#include "mbed.h"
 #include "libs/Hook.h"
 
-class RotaryEncoder : public Module {
+class RotaryEncoder {
     public:
         RotaryEncoder();
-        static RotaryEncoder* instance;
 
-        void on_module_loaded();
-        uint32_t encoder_tick(uint32_t dummy);
-        void on_idle(void* argument);
-        void on_main_loop(void* argument);
+        static void encoder_ra();
+        static void encoder_rb();
+        static void encoder_fa();
+        static void encoder_fb();
+        static void incpos();
+        static void decpos();
+        static void nop();
+
+        static void update();
+
         void reset_counter();
 
-        int get_pos();
+        static int get_pos();
+        float normalized_pos();
 
         template<typename T> RotaryEncoder *up_attach( T *optr, uint32_t ( T::*fptr )( uint32_t ) )
         {
@@ -34,15 +40,21 @@ class RotaryEncoder : public Module {
         }
 
     private:
+        static RotaryEncoder *instance;
+
         Pin a_pin, b_pin;
-        bool last_a;
 
         Hook *up_hook;
         Hook *down_hook;
 
-        volatile struct {
-            int pos;
-        };
+        int maxval, minval;
+
+        static volatile int pos;
+        static volatile unsigned char oldval;
+        static volatile unsigned char curval;
+
+        static Timer atimer;
+        static Timer btimer;
 };
 
 
