@@ -87,7 +87,7 @@ BarGraph* bardisp[3];
 
 
 //RotaryEncoder* RE;
-//PotReader* PR;
+PotReader* PR;
 Heater* heater;
 
 uint32_t disp_update(uint32_t);
@@ -172,14 +172,15 @@ void init() {
     // memory before cache is cleared
     //SimpleShell::print_mem(kernel->streams);
 
-    RE = new RotaryEncoder();
-    PR = new PotReader(RE);
+    i2c = new mbed::I2C(P0_27, P0_28);
+//    RE = new RotaryEncoder();
+    PR = new PotReader(i2c, 8);
     heater = new Heater();
 
     leds[1] = 1;
 
-    i2c = new mbed::I2C(P0_27, P0_28);
-    tempdisp = new SevenSeg(i2c, 1); // wrong should be 1
+    // TODO put all these addresses in their own configs ?
+    tempdisp = new SevenSeg(i2c, 1);
     tempdisp->init();
     tempadisp = new SevenSeg(i2c, 5);
     leds[3] = 1;
@@ -191,7 +192,7 @@ void init() {
 
     bardisp[0] = new BarGraph(i2c, 0);
     bardisp[0]->init();
-    bardisp[1] = new BarGraph(i2c, 2); // wrong should be 2
+    bardisp[1] = new BarGraph(i2c, 2);
     bardisp[1]->init();
     bardisp[2] = new BarGraph(i2c, 4);
     bardisp[2]->init();
@@ -243,9 +244,7 @@ disp_update(uint32_t dummy) {
         bardisp[i]->repaint();
     }
 
-//    tempdisp->print(RotaryEncoder::get_pos());
-    
-    tempdisp->print(globcnt);
+    tempdisp->print(PR->get_pos());
     tempdisp->repaint();
     tempadisp->print_nuli(); tempadisp->repaint();
     flowdisp->print_nuli();  flowdisp->repaint();

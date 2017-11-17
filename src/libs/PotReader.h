@@ -1,13 +1,14 @@
 #ifndef POT_READER_H
 #define POT_READER_H
 
+#include "mbed.h"
 #include "Pin.h"
-#include "RotaryEncoder.h"
 
 class PotReader {
     public:
-        PotReader(RotaryEncoder *TRE);
+        PotReader(mbed::I2C *i2c, char addr);
         float pot_val();
+        float get_pos();
         uint32_t pot_read_tick(uint32_t dummy);
 
     private:
@@ -18,7 +19,9 @@ class PotReader {
 
         int minval, maxval;
 
-        RotaryEncoder *TRE;
+        char _addr;
+        signed char _pos = 25;
+        mbed::I2C *_i2c;
 };
 
 #endif  // POT_READER_H

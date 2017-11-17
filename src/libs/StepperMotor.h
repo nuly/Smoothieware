@@ -12,6 +12,8 @@
 #include "Module.h"
 #include "Pin.h"
 
+// #define FLIP_MOTOR_DIRECTION 
+
 class StepperMotor  : public Module {
     public:
         StepperMotor(Pin& step, Pin& dir, Pin& en);
@@ -28,9 +30,27 @@ class StepperMotor  : public Module {
 
         // ALI REVERSED THIS
         // ah, the importance of abstractions. make this flippable?
-        inline void set_direction(bool f) { dir_pin.set(!f); direction= !f; }
-        inline bool get_direction() const { return !direction; }
-        inline bool which_direction() const { return !direction; }
+        inline void set_direction(bool f) {
+#ifdef FLIP_MOTOR_DIRECTION
+            dir_pin.set(!f); direction= !f;
+#else
+            dir_pin.set(f); direction= f;
+#endif
+        }
+        inline bool get_direction() const {
+#ifdef FLIP_MOTOR_DIRECTION
+            return !direction;
+#else
+            return direction;
+#endif
+        }
+        inline bool which_direction() const {
+#ifdef FLIP_MOTOR_DIRECTION
+            return !direction;
+#else
+            return direction;
+#endif
+        }
 
         void enable(bool state) { en_pin.set(!state); };
         bool is_enabled() const { return !en_pin.get(); };

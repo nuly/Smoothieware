@@ -26,8 +26,9 @@ float HEATINVF(float powfact) {
     return HEATINV[idx] * (1 - di) + HEATINV[idx+1] * di;
 }
 
-PotReader::PotReader(RotaryEncoder *TRE) {
-    this->TRE = TRE;
+PotReader::PotReader(mbed::I2C *i2c, char addr) {
+    _i2c = i2c;
+    _addr = addr;
 
     this->TOP_R = THEKERNEL->config->value(CHECKSUM("TOP_R"))
         ->by_default(4.7F)->as_number();
@@ -58,6 +59,21 @@ PotReader::pot_val() {
     return val;
 }
 
+float
+PotReader::get_pos() {
+    char buf;
+
+    _i2c->read(_addr << 1, &buf, 1);
+    _pos += (signed char)buf;
+    if (_pos > 50) {
+        _pos = 50;
+    } else if (_pos < 0) {
+        _pos = 0;
+    }
+
+    return _pos * 0.02;
+}
+
 uint32_t
 PotReader::pot_read_tick(uint32_t dummy) {
     float speed_pot_val = pot_val();
@@ -65,7 +81,7 @@ PotReader::pot_read_tick(uint32_t dummy) {
     StepTicker::getInstance()->pump_speed(speed);
 
     // forward is 0, backward is 1
-    float heater_pot_val = this->TRE->normalized_pos();
+    float heater_pot_val = get_pos();
     heater_pot_val = HEATINVF(speed_pot_val * heater_pot_val);
     int32_t heater = 8333 * heater_pot_val;
 
