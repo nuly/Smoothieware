@@ -270,14 +270,14 @@ void StepTicker::step_tick (void)
     // state transitions
     switch (state) {
         case ST_PUMP:
-            if (!pump_rocker.get()) {
+            if (pump_rocker.get()) {
                 set_state(ST_HOME);
             }
             break;
         case ST_DISABLE:
         case ST_HOME:
         default:
-            if (pump_rocker.get()) {
+            if (!pump_rocker.get()) {
                 set_state(ST_PUMP);
             }
             break;

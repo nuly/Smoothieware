@@ -176,6 +176,12 @@ void SevenSeg::print(float val) {
     }
 }
 
+void SevenSeg::print(float val, const char* fmt) {
+    char buf[10];
+    sprintf(buf, fmt, val);
+    print(buf);
+}
+
 void SevenSeg::print(const char *buf) {
     int i, j;
     for (i=0, j=0; i<4 && j<10; j++) {
@@ -208,9 +214,10 @@ void BarGraph::set_vals(char r[3], char g[3]) {
 }
 
 void BarGraph::set_val(int val) {
-    char r[] = {0x00, 0x00, 0x00}, g[] = {0x00, 0x00, 0x00};
+    char r[] = {0x00, 0x00, 0x00}, g[] = {0xFF, 0xFF, 0xFF};
     for (int i=0; i<val; i++) {
         r[i/8] |= 0x01 << (i % 8);
+        g[i/8] &= ~(0x01 << (i % 8));
     }
     set_vals(r, g);
 }

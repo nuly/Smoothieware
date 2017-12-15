@@ -12,7 +12,6 @@
 #include "modules/utils/configurator/Configurator.h"
 #include "modules/utils/currentcontrol/CurrentControl.h"
 #include "modules/utils/killbutton/KillButton.h"
-#include "modules/encoder/RotaryEncoder.h"
 #include "libs/Network/uip/Network.h"
 #include "modules/pump/Pump.h"
 #include "Config.h"
@@ -86,7 +85,6 @@ SevenSeg *tempdisp, *tempadisp, *flowdisp;
 BarGraph* bardisp[3];
 
 
-//RotaryEncoder* RE;
 PotReader* PR;
 Heater* heater;
 
@@ -173,9 +171,8 @@ void init() {
     //SimpleShell::print_mem(kernel->streams);
 
     i2c = new mbed::I2C(P0_27, P0_28);
-//    RE = new RotaryEncoder();
     PR = new PotReader(i2c, 8);
-    heater = new Heater();
+    heater = new Heater(&(leds[2]));
 
     leds[1] = 1;
 
@@ -187,8 +184,6 @@ void init() {
     tempadisp->init();
     flowdisp = new SevenSeg(i2c, 3);
     flowdisp->init();
-
-    leds[2] = 1;
 
     bardisp[0] = new BarGraph(i2c, 0);
     bardisp[0]->init();
@@ -226,6 +221,7 @@ void init() {
 
     THEKERNEL->slow_ticker->attach(10, disp_update);
 
+
     // start the timers and interrupts
     THEKERNEL->step_ticker->start();
     THEKERNEL->slow_ticker->start();
@@ -244,9 +240,8 @@ disp_update(uint32_t dummy) {
         bardisp[i]->repaint();
     }
 
-    tempdisp->print(PR->get_pos());
-    tempdisp->repaint();
-    tempadisp->print_nuli(); tempadisp->repaint();
+    tempdisp->print(PR->get_pos(), "%.1f"); tempdisp->repaint();
+    tempadisp->print(PR->get_current_temp(false), "%.1f"); tempadisp->repaint();
     flowdisp->print_nuli();  flowdisp->repaint();
 
     return 0;
@@ -263,8 +258,6 @@ int main() {
             // flash led 2 to show we are alive
             leds[1]= (cnt++ & 0x1000) ? 1 : 0;
         }
-
-        if (cnt == 0x1000) globcnt ++;
 
         THEKERNEL->call_event(ON_MAIN_LOOP);
         THEKERNEL->call_event(ON_IDLE);

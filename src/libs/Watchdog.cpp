@@ -48,7 +48,7 @@ extern "C" void WDT_IRQHandler(void)
         // set led pattern to show we are in watchdog timeout
         leds[0]= 0;
         leds[1]= 1;
-        leds[2]= 0;
+//        leds[2]= 0;
         leds[3]= 1;
     }
 

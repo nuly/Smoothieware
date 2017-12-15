@@ -68,6 +68,8 @@ private:
     static void zero_command( string parameters, StreamOutput *stream);
     static void multiple_speed_command( string parameters, StreamOutput *stream);
     static void set_heater_delay( string parameters, StreamOutput *stream);
+    static void get_temp( string parameters, StreamOutput *stream);
+    static void override_ds( string parameters, StreamOutput *stream);
 
     typedef void (*PFUNC)(string parameters, StreamOutput *stream);
     typedef struct {

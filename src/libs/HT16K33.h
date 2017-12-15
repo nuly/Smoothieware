@@ -31,6 +31,7 @@ class SevenSeg: public HT16K33 {
         void print(int val);
         void print(double val);
         void print(float val);
+        void print(float val, const char *fmt);
         void print(const char *buf);
 };
 

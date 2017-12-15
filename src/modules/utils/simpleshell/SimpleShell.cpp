@@ -13,6 +13,7 @@
 #include "libs/SerialMessage.h"
 #include "libs/StreamOutput.h"
 #include "libs/Heater.h"
+#include "libs/PotReader.h"
 #include "DirHandle.h"
 #include "mri.h"
 #include "version.h"
@@ -26,8 +27,6 @@
 #include "StepperMotor.h"
 #include "StepTicker.h"
 #include "Configurator.h"
-
-#include "modules/encoder/RotaryEncoder.h"
 
 #include "NetworkPublicAccess.h"
 #include "platform_memory.h"
@@ -89,6 +88,8 @@ const SimpleShell::ptentry_t SimpleShell::commands_table[] = {
     {"zero",     SimpleShell::zero_command},
     {"s",        SimpleShell::multiple_speed_command},
     {"h",        SimpleShell::set_heater_delay},
+    {"ptt",      SimpleShell::get_temp},
+    {"ods",      SimpleShell::override_ds},
 
     // unknown command
     {NULL, NULL}
@@ -793,6 +794,28 @@ void SimpleShell::info_command( string parameters, StreamOutput *stream)
 void SimpleShell::stop_command( string parameters, StreamOutput *stream)
 {
     THEKERNEL->step_ticker->stop();
+}
+
+void SimpleShell::get_temp( string parameters, StreamOutput *stream)
+{
+    PotReader::getInstance()->print_temp_line();
+}
+
+void SimpleShell::override_ds( string parameters, StreamOutput *stream)
+{
+    string tmp_str;
+    int32_t delay;
+    int64_t speed;
+
+    tmp_str = shift_parameter( parameters );
+    delay = tmp_str.empty() ? 0 : atoi(tmp_str.c_str());
+    stream->printf("set heater delay to %ld\n", delay);
+
+    tmp_str = shift_parameter( parameters );
+    speed = tmp_str.empty() ? 0 : atoi(tmp_str.c_str());
+    stream->printf("set pump speed to %lld\n", speed);
+
+    PotReader::getInstance()->set_override(delay, speed);
 }
 
 // runs several types of test on the mechanisms
