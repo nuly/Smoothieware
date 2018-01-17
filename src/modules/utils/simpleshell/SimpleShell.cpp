@@ -90,6 +90,7 @@ const SimpleShell::ptentry_t SimpleShell::commands_table[] = {
     {"h",        SimpleShell::set_heater_delay},
     {"ptt",      SimpleShell::get_temp},
     {"ods",      SimpleShell::override_ds},
+    {"fibuf",    SimpleShell::flush_info_buf},
 
     // unknown command
     {NULL, NULL}
@@ -798,7 +799,8 @@ void SimpleShell::stop_command( string parameters, StreamOutput *stream)
 
 void SimpleShell::get_temp( string parameters, StreamOutput *stream)
 {
-    PotReader::getInstance()->print_temp_line();
+    PotReader::getInstance()->buf_temp_line();
+    PotReader::flush_temp_line_buf(stream);
 }
 
 void SimpleShell::override_ds( string parameters, StreamOutput *stream)
@@ -816,6 +818,11 @@ void SimpleShell::override_ds( string parameters, StreamOutput *stream)
     stream->printf("set pump speed to %lld\n", speed);
 
     PotReader::getInstance()->set_override(delay, speed);
+}
+
+void SimpleShell::flush_info_buf( string parameters, StreamOutput *stream)
+{
+    PotReader::flush_temp_line_buf(stream);
 }
 
 // runs several types of test on the mechanisms

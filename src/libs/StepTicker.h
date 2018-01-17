@@ -76,6 +76,8 @@ class StepTicker{
         void set_state(TickerState new_state);
         TickerState get_state();
 
+        int64_t Xd(uint8_t m, int direction);
+
     private:
         static StepTicker *instance;
 

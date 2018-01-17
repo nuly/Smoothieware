@@ -1,6 +1,6 @@
 #define Q           (1000000)
 #define Xmax          (20000)
-#define QVmax       (1000000)
+#define QVmax        (300000)
 #define QAmax         (10000)
 #define NUM_FORWARD       (2)
 #define NUM_PUMPING       (3)

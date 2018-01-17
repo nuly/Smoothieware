@@ -57,8 +57,12 @@ HT16K33::getmem(int addr) {
 
 bool
 HT16K33::repaint() {
+    bool success;
     obuf[0] = 0x00;
-    return _i2c->write(_addr, obuf, 17);
+//    __disable_irq();
+    success = _i2c->write(_addr, obuf, 17);
+//    __enable_irq();
+    return success;
 }
 
 void SevenSeg::print_nuli() {
@@ -67,7 +71,6 @@ void SevenSeg::print_nuli() {
     setmem(2, 0x3E); // U
     setmem(6, 0x38); // L
     setmem(8, 0x30); // I
-    repaint();
 }
 
 void SevenSeg::set_colon(bool colon) {
@@ -150,13 +153,13 @@ void SevenSeg::print(int val) {
     char buf[10];
     int xp = 0;
     if (val > -1000 && val < 10000) {
-        sprintf(buf, "%4.4d", val);
+        snprintf(buf, 10, "%4.4d", val);
         print(buf);
     } else {
         while (val > 100 || -val < -10) {
             val /= 10; xp += 1;
         }
-        sprintf(buf, "%dE%d", val, xp);
+        snprintf(buf, 10, "%dE%d", val, xp);
         print(buf);
     }
 }
@@ -171,14 +174,14 @@ void SevenSeg::print(float val) {
     if (val <= -1000 || val >= 10000) {
         print((int)val);
     } else {
-        sprintf(buf, "%f", val);
+        snprintf(buf, 10, "%f", val);
         print(buf);
     }
 }
 
 void SevenSeg::print(float val, const char* fmt) {
     char buf[10];
-    sprintf(buf, fmt, val);
+    snprintf(buf, 10, fmt, val);
     print(buf);
 }
 
@@ -199,7 +202,6 @@ void SevenSeg::print(const char *buf) {
     for (; i<4; i++) {
         set_char(i, ' ');
     }
-    repaint();
 }
 
 void BarGraph::set_vals(char r[3], char g[3]) {

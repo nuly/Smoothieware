@@ -6,15 +6,16 @@ DEVICES=lpc1768
 #  Checked - Optimizations enabled with MRI debug monitor support. (Recommended Type)
 #  Release - Optimizations enabled.
 #  Debug - Optimization disabled with MRI debug monitor support.
-#BUILD_TYPE=Checked
-BUILD_TYPE=Debug
+BUILD_TYPE=Checked
+#BUILD_TYPE=Debug
+#BUILD_TYPE=Release
 
 # Set to 1 to tag each heap allocation with the caller's return address.
 # NOTE: Can't be enabled with latest build as not compatible with newlib nano.
 HEAP_TAGS=0
 
 # Set to 1 configure MPU to disable write buffering and eliminate imprecise bus faults.
-WRITE_BUFFER_DISABLE=0
+WRITE_BUFFER_DISABLE=1
 
 # Set to non zero value if you want checks to be enabled which reserve a
 # specific amount of space for the stack.  The heap's growth will be
@@ -36,7 +37,8 @@ ifeq "$(ENABLE_DEBUG_MONITOR)" "1"
 # Can add MRI_UART_BAUD=115200 to next line if GDB fails to connect to MRI.
 # Tends to happen on some Linux distros but not Windows and OS X.
 MRI_UART=MRI_UART_0
-MRI_BREAK_ON_INIT=1
+#MRI_BREAK_ON_INIT=1
+MRI_BREAK_ON_INIT=0
 MRI_SEMIHOST_STDIO=1
 else
 MRI_UART=MRI_UART_0 MRI_UART_SHARE

@@ -27,6 +27,7 @@ StepperMotor::StepperMotor(Pin &step, Pin &dir, Pin &en) : step_pin(step), dir_p
     set_high_on_debug(en.port_number, en.pin);
 
     X = QV = QA = QVt = 0;
+    Xd[0] = Xd[1] = 0;
     s = L = L1 = QV1 = 0;
 
     moving= false;
@@ -86,6 +87,7 @@ void StepperMotor::manual_step(bool dir) {
 
     // keep track of actuators actual position in steps
     this->X += (dir ? 1 : -1);
+    this->Xd[dir] ++;
 }
 
 void StepperMotor::set_speed(int64_t speed) {

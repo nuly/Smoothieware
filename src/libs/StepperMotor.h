@@ -23,7 +23,7 @@ class StepperMotor  : public Module {
         uint8_t get_motor_id() const { return motor_id; }
 
         // called from step ticker ISR
-        inline bool step() { step_pin.set(1); X += (get_direction()?1:-1); return moving; }
+        inline bool step() { step_pin.set(1); X += (get_direction()?1:-1); Xd[get_direction()]++; return moving; }
         // called from unstep ISR
         inline void unstep() { step_pin.set(0); }
         // called from step ticker ISR
@@ -64,13 +64,14 @@ class StepperMotor  : public Module {
         int64_t get_actual_speed() const { return QV; };
 
         int64_t get_current_step(void) const { return X; }
+        int64_t get_directed_steps(int i) const { return Xd[i]; }
 
         inline bool is_emptying() { return QVt > 0; }
         inline bool is_filling() { return QVt <= 0; }
 
         void zero_position();
 
-        volatile int64_t X;
+        volatile int64_t X, Xd[2];
         volatile int64_t QV, QVt; // actual and target velocities
         volatile int64_t QA;
         int64_t s, L, L1, QV1;

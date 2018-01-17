@@ -88,6 +88,7 @@ BarGraph* bardisp[3];
 PotReader* PR;
 Heater* heater;
 
+uint32_t disp_repaint(uint32_t);
 uint32_t disp_update(uint32_t);
 
 void init() {
@@ -171,12 +172,16 @@ void init() {
     //SimpleShell::print_mem(kernel->streams);
 
     i2c = new mbed::I2C(P0_27, P0_28);
+
+    i2c->frequency(10000);
     PR = new PotReader(i2c, 8);
     heater = new Heater(&(leds[2]));
 
     leds[1] = 1;
 
     // TODO put all these addresses in their own configs ?
+    __disable_irq();
+
     tempdisp = new SevenSeg(i2c, 1);
     tempdisp->init();
     tempadisp = new SevenSeg(i2c, 5);
@@ -191,6 +196,8 @@ void init() {
     bardisp[1]->init();
     bardisp[2] = new BarGraph(i2c, 4);
     bardisp[2]->init();
+
+    __enable_irq();
 
     // clear up the config cache to save some memory
     kernel->config->config_cache_clear();
@@ -219,8 +226,8 @@ void init() {
         }
     }
 
-    THEKERNEL->slow_ticker->attach(10, disp_update);
-
+    // HTK lib isn't thread safe
+    THEKERNEL->slow_ticker->attach(10, disp_repaint);
 
     // start the timers and interrupts
     THEKERNEL->step_ticker->start();
@@ -237,12 +244,25 @@ disp_update(uint32_t dummy) {
         } else {
             bardisp[i]->set_val((THEKERNEL->step_ticker->get_current_step(i) * 25) / Xmax);
         }
-        bardisp[i]->repaint();
     }
 
-    tempdisp->print(PR->get_pos(), "%.1f"); tempdisp->repaint();
-    tempadisp->print(PR->get_current_temp(false), "%.1f"); tempadisp->repaint();
-    flowdisp->print_nuli();  flowdisp->repaint();
+    tempdisp->print(PR->get_pos(false), "%.1f");
+    tempadisp->print(PR->get_current_temp(false), "%.1f");
+    flowdisp->print_nuli(); 
+
+    return 0;
+}
+
+uint32_t
+disp_repaint(uint32_t dummy) {
+    // maybe only repaint if there's a change?
+    PR->get_pos(true);
+    tempdisp->repaint();
+    tempadisp->repaint();
+    flowdisp->repaint();
+    for (int i=0; i<3; i++) {
+        bardisp[i]->repaint();
+    }
 
     return 0;
 }
@@ -256,11 +276,18 @@ int main() {
     while(1) {
         if(THEKERNEL->is_using_leds()) {
             // flash led 2 to show we are alive
-            leds[1]= (cnt++ & 0x1000) ? 1 : 0;
+            leds[1]= (cnt & 0x1000) ? 1 : 0;
+        }
+
+        if ((cnt & 0x0FFF) == 0x0) {
+            disp_update(0);
+//            disp_repaint(0);
         }
 
         THEKERNEL->call_event(ON_MAIN_LOOP);
         THEKERNEL->call_event(ON_IDLE);
+
+        cnt ++;
     }
 
     return 0;

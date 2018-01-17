@@ -60,8 +60,8 @@ StepTicker::StepTicker()
     LPC_TIM1->TCR = 0;              // Disable interrupt
 
     // Default start values
-    this->set_frequency(10000);
-    this->set_unstep_time(3);
+    this->set_frequency(50000);
+    this->set_unstep_time(10);
 
     this->reverse.reset();
     this->unstep.reset();
@@ -79,7 +79,7 @@ StepTicker::StepTicker()
 
     this->pump_rocker.from_string(
                     THEKERNEL->config->value(CHECKSUM("pump_sw"))
-                    ->by_default("0.23")->as_string())
+                    ->by_default("1.22")->as_string())
         ->as_input()->pull_up();
 
     this->endstops[0].from_string(
@@ -104,7 +104,6 @@ StepTicker::~StepTicker()
 void StepTicker::start()
 {
     set_state(ST_HOME);
-
 
     NVIC_EnableIRQ(TIMER0_IRQn);     // Enable interrupt handler
     NVIC_EnableIRQ(TIMER1_IRQn);     // Enable interrupt handler
@@ -257,6 +256,7 @@ LongerToFill(StepperMotor* A, StepperMotor* B) {
 */
 
 // step clock
+// TODO make this way way way faster
 void StepTicker::step_tick (void)
 {
     //SET_STEPTICKER_DEBUG_PIN(running ? 1 : 0);
@@ -268,6 +268,9 @@ void StepTicker::step_tick (void)
     }
 
     // state transitions
+    // this will be super fast unless 
+    // there is a state transition
+
     switch (state) {
         case ST_PUMP:
             if (pump_rocker.get()) {
@@ -285,6 +288,7 @@ void StepTicker::step_tick (void)
 
     bool donehoming;
 
+    __disable_irq();
     switch (state) {
         case ST_PUMP:
             reverse.reset();
@@ -309,8 +313,19 @@ void StepTicker::step_tick (void)
             }
 
             for (uint8_t m = 0; m < NUM_PUMPING; m++) {
-                if (motor[m]->is_filling() && motor[m]->will_crash()) {
-                    motor[m]->set_speed(motor[m]->get_speed()/2);
+                if (motor[m]->is_filling()) {
+                    if (!endstops[m].get()) {
+                        // hit the endstop, stop immediately
+                        motor[m]->set_speed(0);
+                        motor[m]->zero_position();
+                    }
+                    /*
+                        // they stop really fast, probably no need
+                        // to slow down
+                        else if (motor[m]->will_crash()) {
+                        motor[m]->set_speed(motor[m]->get_speed()/2);
+                    } 
+                    */
                 }
             }
             break;
@@ -319,6 +334,7 @@ void StepTicker::step_tick (void)
             donehoming = true;
             for (uint8_t m = 0; m < num_motors; m++) {
                 if (endstops[m].get()) {
+                    // keep going until we hit the endstop
                     motor[m]->set_speed(-QVmax);
                     donehoming = false;
                 } else {
@@ -359,6 +375,7 @@ void StepTicker::step_tick (void)
         LPC_TIM1->TCR = 3;
         LPC_TIM1->TCR = 1;
     }
+    __enable_irq();
 }
 
 // returns index of the stepper motor in the array and bitset
@@ -436,4 +453,8 @@ void StepTicker::zero_motors() {
     for (uint8_t m=0; m<num_motors; m++) {
         motor[m]->zero_position();
     }
+}
+
+int64_t StepTicker::Xd(uint8_t m, int direction) {
+    return motor[m]->get_directed_steps(direction);
 }

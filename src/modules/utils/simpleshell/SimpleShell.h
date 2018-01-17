@@ -70,6 +70,7 @@ private:
     static void set_heater_delay( string parameters, StreamOutput *stream);
     static void get_temp( string parameters, StreamOutput *stream);
     static void override_ds( string parameters, StreamOutput *stream);
+    static void flush_info_buf( string parameters, StreamOutput *stream);
 
     typedef void (*PFUNC)(string parameters, StreamOutput *stream);
     typedef struct {
