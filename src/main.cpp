@@ -19,9 +19,6 @@
 #include "ConfigValue.h"
 #include "StepTicker.h"
 #include "SlowTicker.h"
-#include "PotReader.h"
-#include "Heater.h"
-#include "HT16K33.h"
 
 // #include "libs/ChaNFSSD/SDFileSystem.h"
 #include "libs/nuts_bolts.h"
@@ -40,7 +37,7 @@
 
 #include "libs/Watchdog.h"
 
-#include "I2C.h"
+#include "I2CSlave.h"
 
 #include "version.h"
 #include "system_LPC17xx.h"
@@ -78,18 +75,7 @@ GPIO leds[5] = {
     GPIO(P4_28)
 };
 
-volatile int zccnt = 0;
-
-mbed::I2C* i2c;
-SevenSeg *tempdisp, *tempadisp, *flowdisp;
-BarGraph* bardisp[3];
-
-
-PotReader* PR;
-Heater* heater;
-
-uint32_t disp_repaint(uint32_t);
-uint32_t disp_update(uint32_t);
+mbed::I2CSlave* i2c;
 
 void init() {
     // Default pins to low status
@@ -171,33 +157,9 @@ void init() {
     // memory before cache is cleared
     //SimpleShell::print_mem(kernel->streams);
 
-    i2c = new mbed::I2C(P0_27, P0_28);
-
-    i2c->frequency(10000);
-    PR = new PotReader(i2c, 8);
-    heater = new Heater(&(leds[2]));
-
-    leds[1] = 1;
-
-    // TODO put all these addresses in their own configs ?
-    __disable_irq();
-
-    tempdisp = new SevenSeg(i2c, 1);
-    tempdisp->init();
-    tempadisp = new SevenSeg(i2c, 5);
-    leds[3] = 1;
-    tempadisp->init();
-    flowdisp = new SevenSeg(i2c, 3);
-    flowdisp->init();
-
-    bardisp[0] = new BarGraph(i2c, 0);
-    bardisp[0]->init();
-    bardisp[1] = new BarGraph(i2c, 2);
-    bardisp[1]->init();
-    bardisp[2] = new BarGraph(i2c, 4);
-    bardisp[2]->init();
-
-    __enable_irq();
+    i2c = new mbed::I2CSlave(P0_27, P0_28);
+    i2c->frequency(100000);
+    i2c->address(0xA0);
 
     // clear up the config cache to save some memory
     kernel->config->config_cache_clear();
@@ -226,48 +188,17 @@ void init() {
         }
     }
 
-    // HTK lib isn't thread safe
-    THEKERNEL->slow_ticker->attach(10, disp_repaint);
-
     // start the timers and interrupts
     THEKERNEL->step_ticker->start();
     THEKERNEL->slow_ticker->start();
 }
 
-int globcnt = 0;
-
-uint32_t
-disp_update(uint32_t dummy) {
-    for (int i=0; i<3; i++) {
-        if (THEKERNEL->step_ticker->get_current_step(i) <= 0) {
-            bardisp[i]->all_green();
-        } else {
-            bardisp[i]->set_val((THEKERNEL->step_ticker->get_current_step(i) * 25) / Xmax);
-        }
-    }
-
-    tempdisp->print(PR->get_pos(false), "%.1f");
-    tempadisp->print(PR->get_current_temp(false), "%.1f");
-    flowdisp->print_nuli(); 
-
-    return 0;
-}
-
-uint32_t
-disp_repaint(uint32_t dummy) {
-    // maybe only repaint if there's a change?
-    PR->get_pos(true);
-    tempdisp->repaint();
-    tempadisp->repaint();
-    flowdisp->repaint();
-    for (int i=0; i<3; i++) {
-        bardisp[i]->repaint();
-    }
-
-    return 0;
-}
-
 int main() {
+    char buf[3];
+    char error_status[2];
+    error_status[0] = 0;
+    error_status[1] = '\0';
+
     init();
 
     uint16_t cnt= 0;
@@ -279,13 +210,45 @@ int main() {
             leds[1]= (cnt & 0x1000) ? 1 : 0;
         }
 
-        if ((cnt & 0x0FFF) == 0x0) {
-            disp_update(0);
-//            disp_repaint(0);
-        }
+        StepTicker::getInstance()->on_main_loop();
 
         THEKERNEL->call_event(ON_MAIN_LOOP);
         THEKERNEL->call_event(ON_IDLE);
+
+        int i = i2c->receive();
+        if (i == mbed::I2CSlave::WriteAddressed) {
+            i2c->read(buf, 3);
+            switch (buf[0]) {
+                case 'H':
+                    StepTicker::getInstance()->set_state(ST_HOME);
+                    error_status[0] = 0;
+                    break;
+                case 'P':
+                    StepTicker::getInstance()->pump_speed(2560 * buf[1] + 10 * buf[2]);
+                    StepTicker::getInstance()->set_state(ST_PUMP);
+                    error_status[0] = 0;
+                    break;
+                case 'M':
+                    StepTicker::getInstance()->set_speed(buf[1], 2000 * buf[2]);
+                    StepTicker::getInstance()->set_state(ST_MANUAL);
+                    error_status[0] = 0;
+                    break;
+                case 'm':
+                    StepTicker::getInstance()->set_speed(buf[1], -2000 * buf[2]);
+                    StepTicker::getInstance()->set_state(ST_MANUAL);
+                    error_status[0] = 0;
+                    break;
+                case 'D':
+                    StepTicker::getInstance()->set_state(ST_DISABLE);
+                    error_status[0] = 0;
+                    break;
+                default:
+                    error_status[0] = 1;
+                    break;
+            }
+        } else if (i == mbed::I2CSlave::ReadAddressed) {
+            i2c->write(error_status, 2);
+        }
 
         cnt ++;
     }

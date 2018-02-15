@@ -76,6 +76,8 @@ class StepperMotor  : public Module {
         volatile int64_t QA;
         int64_t s, L, L1, QV1;
 
+        volatile bool homed;
+
         bool tick();
         bool will_crash();
 

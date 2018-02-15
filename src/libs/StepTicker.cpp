@@ -28,7 +28,6 @@
 
 #include "int128.h"
 #include "constants.h"
-#include "libs/Adc.h"
 
 #include "Config.h"
 #include "checksumm.h"
@@ -60,8 +59,8 @@ StepTicker::StepTicker()
     LPC_TIM1->TCR = 0;              // Disable interrupt
 
     // Default start values
-    this->set_frequency(50000);
-    this->set_unstep_time(10);
+    this->set_frequency(25000);
+    this->set_unstep_time(3);
 
     this->reverse.reset();
     this->unstep.reset();
@@ -111,8 +110,6 @@ void StepTicker::start()
 }
 
 void StepTicker::set_state(TickerState new_state) {
-    Heater::enable(new_state == ST_PUMP);
-
     switch(new_state) {
         case ST_DISABLE:
             for (int i = 0; i < num_motors; i++) {
@@ -132,14 +129,23 @@ void StepTicker::set_state(TickerState new_state) {
                     }
                 }
             }
+            break;
         case ST_HOME:
-        case ST_MANUAL:
-            for (int i = 0; i < num_motors; i++) {
-                this->motor[i]->enable(true);
-                this->motor[i]->start_moving();
+            for (uint8_t m=0; m<num_motors; m++) {
+                motor[m]->homed = false;
             }
             break;
+        case ST_MANUAL:
+            break;
     }
+
+    if (new_state != ST_DISABLE) {
+        for (int i = 0; i < num_motors; i++) {
+            this->motor[i]->enable(true);
+            this->motor[i]->start_moving();
+        }
+    }
+
     state = new_state;
 }
 
@@ -255,22 +261,13 @@ LongerToFill(StepperMotor* A, StepperMotor* B) {
 }
 */
 
-// step clock
-// TODO make this way way way faster
-void StepTicker::step_tick (void)
+void
+StepTicker::on_main_loop (void)
 {
-    //SET_STEPTICKER_DEBUG_PIN(running ? 1 : 0);
-
-    if(THEKERNEL->is_halted()) {
-        running= false;
-        current_tick = 0;
-        return;
-    }
-
     // state transitions
     // this will be super fast unless 
     // there is a state transition
-
+    /*
     switch (state) {
         case ST_PUMP:
             if (pump_rocker.get()) {
@@ -285,10 +282,10 @@ void StepTicker::step_tick (void)
             }
             break;
     }
+    */
 
     bool donehoming;
 
-    __disable_irq();
     switch (state) {
         case ST_PUMP:
             reverse.reset();
@@ -312,6 +309,7 @@ void StepTicker::step_tick (void)
                 }
             }
 
+            // might need to move endstop testing to the step tick
             for (uint8_t m = 0; m < NUM_PUMPING; m++) {
                 if (motor[m]->is_filling()) {
                     if (!endstops[m].get()) {
@@ -333,12 +331,13 @@ void StepTicker::step_tick (void)
         case ST_HOME:
             donehoming = true;
             for (uint8_t m = 0; m < num_motors; m++) {
-                if (endstops[m].get()) {
+                if (endstops[m].get() && !(motor[m]->homed)) {
                     // keep going until we hit the endstop
                     motor[m]->set_speed(-QVmax);
                     donehoming = false;
                 } else {
                     motor[m]->set_speed(0);
+                    motor[m]->homed = true;
                 }
             }
             if (donehoming) {
@@ -352,7 +351,19 @@ void StepTicker::step_tick (void)
         default:
             break;
     }
+}
 
+// step clock
+// TODO make this way way way faster
+void StepTicker::step_tick (void)
+{
+    if(THEKERNEL->is_halted()) {
+        running= false;
+        current_tick = 0;
+        return;
+    }
+
+    __disable_irq();
     // for each motor
     for (uint8_t m = 0; m < num_motors; m++) {
         if (!motor[m]->is_moving()) {
@@ -361,6 +372,12 @@ void StepTicker::step_tick (void)
 
         if (motor[m]->tick()) {
             unstep.set(m);
+        }
+
+        // endstop testing
+        if (!motor[m]->get_direction() && !endstops[m].get()) {
+            motor[m]->set_speed(0);
+            motor[m]->zero_position();
         }
     }
 
@@ -395,26 +412,6 @@ void StepTicker::set_speed(int i, int64_t speed) {
     if (i >= 0 && i < num_motors) {
         motor[i]->set_speed(speed);
     }
-}
-
-uint32_t StepTicker::on_speed_up(uint32_t dummy) {
-    if (flux_hat + QVDELTA > QVmax) {
-        flux_hat = QVmax;
-    } else {
-        flux_hat += QVDELTA;
-    }
-    this->pump_speed(flux_hat);
-    return 0;
-}
-
-uint32_t StepTicker::on_speed_down(uint32_t dummy) {
-    if (flux_hat - QVDELTA < 0) {
-        flux_hat = 0;
-    } else {
-        flux_hat -= QVDELTA;
-    }
-    this->pump_speed(flux_hat);
-    return 0;
 }
 
 int64_t StepTicker::get_actual_speed(int i) const { return motor[i]->QV; }

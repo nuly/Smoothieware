@@ -32,6 +32,8 @@ StepperMotor::StepperMotor(Pin &step, Pin &dir, Pin &en) : step_pin(step), dir_p
 
     moving= false;
 
+    homed = false;
+
     enable(false);
     unstep(); // initialize step pin
     set_direction(false); // initialize dor pin

@@ -70,13 +70,12 @@ class StepTicker{
         int64_t get_pump_speed();
         void zero_motors();
 
-        uint32_t on_speed_up(uint32_t dummy);
-        uint32_t on_speed_down(uint32_t dummy);
-
         void set_state(TickerState new_state);
         TickerState get_state();
 
         int64_t Xd(uint8_t m, int direction);
+
+        void on_main_loop();
 
     private:
         static StepTicker *instance;
